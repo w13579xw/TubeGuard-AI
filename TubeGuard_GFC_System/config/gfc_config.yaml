@@ -1,0 +1,29 @@
+# TubeGuard GFC System Configuration
+# 工业管道精密缺陷检测系统配置文件
+
+system:
+  project_name: "TubeGuard-AI"
+  version: "1.0.0"
+
+thresholds:
+  # 几何初筛阈值 (Stage A)
+  # 单位: mm (假设已经过标定)
+  geometry:
+    diameter_min: 49.5  # 最小内径
+    diameter_max: 50.5  # 最大内径
+    wall_thickness_min: 4.8 # 最小壁厚
+    eccentricity_max: 0.05  # 最大允许偏心度
+
+  # 纹理筛查阈值 (Stage B - PatchCore)
+  texture:
+    anomaly_score_threshold: 0.6 # 异常分数阈值 (0-1)
+
+model_paths:
+  # 模型权重文件路径
+  stage_a_segmentation: "weights/segformer_b3.pth"
+  stage_b_patchcore: "weights/patchcore_memory.faiss"
+  stage_b_yolo: "weights/yolov12_cbam.pt"
+
+output:
+  # 输出设置
+  save_debug_images: true # 是否保存中间调试图 (亚像素边缘等)

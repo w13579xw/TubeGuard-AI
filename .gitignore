@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDEs
+.idea/
+.vscode/
+
+# Data and Logs (Highly recommended to ignore large datasets)
+raw_data/
+processed_data/
+data/
+error_images/
+logs/
+
+# Environments
+.venv/
+env/
+venv/
+ENV/
+
+# 模型文件
+*.pth
+*.pt
+*.bin
+*.onnx
+*.h5
+*.pb
+*.weights
+
+# 数据集
+*.zip
+*.tar.gz
+*.rar
+*.csv
+*.xlsx
+
+# 大文件目录
+res/
+data/
+dataset/
+models/
+
+# 缓存
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# 日志
+*.log
+
+# IDE
+.vscode/
+.idea/
