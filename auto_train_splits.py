@@ -190,8 +190,44 @@ def train_split(dataset_name, num_epochs=50, batch_size=4, patience=15):
             print(f"\n⏹️ 触发早停机制 (连续 {patience} 轮无改善)。")
             break
             
-    print(f"\n🎉 目标集 {dataset_name} 的独立重训已完成！")
-    print(f"💾 最佳权重存放于: {best_model_path}\n")
+    # 2. ==== 最终测试与指标统计 (Test) ====
+    print(f"\n🎉 目标集 {dataset_name} 重训已完成，最佳权重: {best_model_path.name}")
+    print("🔬 [Testing] 立即为您执行自动评价...")
+    
+    model.load_state_dict(torch.load(best_model_path, map_location=device))
+    model.eval()
+    
+    test_dataset = CSVImageDataset(base_dir / "test.csv", transform=data_transforms['val'])
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
+    cm = [[0, 0], [0, 0]]
+    
+    with torch.no_grad():
+        for inputs, labels in tqdm(test_loader, desc="  ↳ test"):
+            inputs, labels = inputs.to(device), labels.to(device)
+            outputs = model(inputs)
+            _, preds = torch.max(outputs, 1)
+            for i in range(inputs.size(0)):
+                cm[labels[i].item()][preds[i].item()] += 1
+
+    TP, FN = cm[0][0], cm[0][1]
+    FP, TN = cm[1][0], cm[1][1]
+    total = sum(map(sum, cm))
+    
+    acc = (TP + TN) / total if total > 0 else 0
+    prec = TP / (TP + FP) if (TP + FP) > 0 else 0
+    rec = TP / (TP + FN) if (TP + FN) > 0 else 0
+    f1 = 2 * prec * rec / (prec + rec) if (prec + rec) > 0 else 0
+    
+    results_csv = Path("data/experiments/experiment_results_summary.csv")
+    if not results_csv.exists():
+        with open(results_csv, "w", encoding="utf-8", newline="") as f:
+            csv.writer(f).writerow(["Dataset_Split", "Model", "Accuracy", "Precision", "Recall", "F1_Score"])
+            
+    with open(results_csv, "a", encoding="utf-8", newline="") as f:
+        csv.writer(f).writerow([dataset_name, "YOLOv10_TPH", f"{acc:.4%}", f"{prec:.4%}", f"{rec:.4%}", f"{f1:.4f}"])
+        
+    print(f"\n📊 评测完毕，{dataset_name} 的指标已一键归档存入 {results_csv.name}")
+    print(f" => 综合 F1-Score: {f1:.4f}\n")
 
 def main():
     splits = ["dataset_all_811", "dataset_all_622", "dataset_all_532"]
