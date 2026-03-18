@@ -41,13 +41,12 @@ class YOLOv10TPHClassifier(nn.Module):
     def __init__(self, model_weight='yolov10n.pt', num_classes=2):
         super().__init__()
 
-        # --- [改进1] 严格检查权重文件 ---
-        # 如果不是 .pt 结尾（可能是想从头训练），或者是 .pt 但文件不存在
+        # --- [改进1] 智能检查并尝试自动下载缺失的预训练权重 ---
         if str(model_weight).endswith('.pt') and not os.path.exists(model_weight):
-            print(f"\n❌ [致命错误] 找不到 YOLOv10 预训练权重: {model_weight}")
-            print("请下载权重文件 (yolov10n.pt) 并放到项目根目录下。")
-            print("程序已强制退出，避免使用随机权重进行无效训练。")
-            sys.exit(1)  # 直接退出程序
+            print(f"\n⚠️ 找不到本地 YOLOv10 预训练权重路径: {model_weight}")
+            print(f"尝试转交 Ultralytics 引擎进行网络自动下载...")
+            model_weight = os.path.basename(model_weight) # 退化为纯文件名触发 yolov10 的自动下载
+
 
         print(f"Loading YOLOv10 Backbone from {model_weight}...")
 
