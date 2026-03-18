@@ -17,8 +17,14 @@ import torchvision.transforms as transforms
 
 # 导入 baseline 模型
 curr_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(curr_dir, "NN", "yolov10"))
-from baseline_model import YOLOv10BaselineClassifier
+if curr_dir not in sys.path:
+    sys.path.insert(0, curr_dir)
+
+try:
+    from NN.yolov10.baseline_model import YOLOv10BaselineClassifier
+except ImportError:
+    print(f"❌ 导入失败，请检查项目目录下是否存在 NN/yolov10/baseline_model.py")
+    sys.exit(1)
 
 def main():
     test_csv = Path("data/unified_dataset/test.csv")

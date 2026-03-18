@@ -23,9 +23,14 @@ from tqdm import tqdm
 # 导入并配置原版基线模型
 # =========================================================================
 curr_dir = os.path.dirname(os.path.abspath(__file__))
-# 引入 baseline 所在的包路径
-sys.path.insert(0, os.path.join(curr_dir, "NN", "yolov10"))
-from baseline_model import YOLOv10BaselineClassifier
+if curr_dir not in sys.path:
+    sys.path.insert(0, curr_dir)
+
+try:
+    from NN.yolov10.baseline_model import YOLOv10BaselineClassifier
+except ImportError as e:
+    print(f"❌ 导入失败，请检查项目目录下是否存在 NN/yolov10/baseline_model.py")
+    raise e
 
 
 class CSVImageDataset(Dataset):
