@@ -221,20 +221,18 @@ def train_and_eval_ablation(ablation_name, num_epochs=50, batch_size=4, patience
 
 
 def main():
-    # 消融集的预设列表，这些文件夹将由上游 build_experiment_datasets.py 生出
-    # 您需要确保在跑这个以前，对应的纯化集已经生成即可。
+    # 本消融实验的设计：对比原版无增幅结构的 YOLOv10 与加入了 TPH 头的模型性能表现。
+    # 按照指示，无需再造控制变量的剥离数据，直接使用已有的全量大一统 8:1:1 混合切分集。
     target_sets = [
-        "dataset_scratch_811", 
-        "dataset_lighting_811", 
-        "dataset_texture_811",
-        "dataset_combined_811" # 做一个含所有数据的作为对照组
+        "dataset_all_811"
     ]
 
-    print("=== YOLOv10 无增强结构基线模型消融性能探测 ===")
+    print("=== YOLOv10 (Vanilla) 结构消融性能基线训练 ===")
     for ds_name in target_sets:
         train_and_eval_ablation(ds_name, num_epochs=50, batch_size=4, patience=15)
         
-    print("\n✅ 所有存在的消融组均已处理完毕！总览报表：data/experiments/ablation_baseline_results.csv")
+    print("\n✅ TPH 模块消融组 (Vanilla Baseline) 训练与评估完毕！")
+    print("总览报表存放在：data/experiments/ablation_baseline_results.csv")
 
 if __name__ == "__main__":
     main()
