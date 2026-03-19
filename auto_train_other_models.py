@@ -222,24 +222,36 @@ def train_and_test_other(model_name, model_class, img_size, dataset_name, num_ep
     print(f" => 竞品最终 F1-Score: {f1:.4f}\n")
 
 
+import argparse
+
 def main():
+    parser = argparse.ArgumentParser(description="单点透传启动或并行测试各大基线模型")
+    parser.add_argument("--model", type=str, default="all", choices=["all", "resnet", "vit", "swin"], 
+                        help="指定需要单独训练测试的模型架构：resnet, vit, swin 或 all")
+    parser.add_argument("--batch_size", type=int, default=16, help="您的 A100 显存极大，我默认为您调升到了16以提速。遇到OOM可自行降回 4。")
+    args = parser.parse_args()
+
     target_dataset = "dataset_all_811"
     
-    # 按照之前的标准进行统一分辨率对齐
-    models_to_train = [
-        ("ResNet50", ResNetBaseline, 224),
-        ("ViT-B/16", ViTBaseline, 224),
-        ("SwinV2", SwinV2Baseline, 256)
-    ]
+    # 按照之前的标准进行统一分辨率对齐与注册库
+    all_models = {
+        "resnet": ("ResNet50", ResNetBaseline, 224),
+        "vit": ("ViT-B/16", ViTBaseline, 224),
+        "swin": ("SwinV2", SwinV2Baseline, 256)
+    }
     
-    print(f"🚀 将在目标集 {target_dataset} 上对各大经典门派基线模型发起重训并考核...")
-    
-    for m_name, m_cls, m_size in models_to_train:
-        # 相比于最轻量的 YOLOv10-TPH，针对其他笨重的基线模型，由于它们参数极为沉重，
-        # 为了防爆显存，建议 batch_size 维持在保守的 4。
-        train_and_test_other(m_name, m_cls, m_size, target_dataset, num_epochs=50, batch_size=4, patience=15)
+    if args.model == "all":
+        models_to_train = list(all_models.values())
+        print(f"🚀 将在目标集 {target_dataset} 上 [串行接力] 对各大经典基线发起考核...")
+    else:
+        models_to_train = [all_models[args.model]]
+        print(f"🚀 [并行模式触发] 将在目标集 {target_dataset} 上 [独立核] 打穿训练: {args.model}")
         
-    print("\n✅ 所有针对 811 的横向学术竞品模型的重训与对标完成！可打开 experiment_results_summary.csv 欣赏战果。")
+    for m_name, m_cls, m_size in models_to_train:
+        train_and_test_other(m_name, m_cls, m_size, target_dataset, 
+                             num_epochs=50, batch_size=args.batch_size, patience=15)
+        
+    print(f"\n✅ 指令队列执行完毕！请关注 data/experiments/experiment_results_summary.csv")
 
 if __name__ == "__main__":
     main()
