@@ -17,10 +17,12 @@ import torch.optim as optim
 # =========================================================================
 # 紧急环境修复：应对某些 Linux 服务器底层 cuDNN 动态匹配引擎不兼容问题
 # "RuntimeError: GET was unable to find an engine to execute this computation"
+# 由于服务器底层 libcudnn_cnn_train.so.8 已经发生严重 symbol 破损，
+# benchmark 拦截已失效。此处直接彻底禁用 cuDNN 联动，退回原生 CUDA 计算。
 # =========================================================================
 torch.backends.cudnn.benchmark = False
 torch.backends.cudnn.deterministic = True
-# torch.backends.cudnn.enabled = False # 万不得已时开启，但会极大拖慢速度
+torch.backends.cudnn.enabled = False # 万不得已的终极屏蔽
 
 from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
