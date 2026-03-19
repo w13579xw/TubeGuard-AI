@@ -10,15 +10,21 @@
 ### 1.1 模型同域公平训练
 *所有模型（包括 YOLOv10-TPH 以及上述经典基线模型）均需要在同一份由数据增强生成的统一大集 `data/unified_dataset` 下使用类似超参数进行微调训练。*
 
-### 1.2 全量自动评估运行方式
-我们提供了一键测试脚本，该脚本会自动载入已经预训练好的上述各个模型的权重（`*_best.pth`），在 `data/unified_dataset/test.csv` (混合了各色合成缺陷、划痕、光照异常) 上进行同台竞技，并输出 Precision、Recall 以及 F1-Score。
+### 1.2 经典基线模型的自动化重训与横评
+对于 ResNet50、ViT-B/16 和 Swin Transformer V2 这三大经典模型，我们在 `dataset_all_811` 集上为您配备了一套**全自动重训与打分合并脚本**。它会像炼丹一样，逐个利用预训练的主干网络在您的管件图库里深耕，并输出对标结果到总报表中。
 
-**执行命令：**
+**训练及同步记录命令 (推荐服务器挂机)：**
+```bash
+nohup python auto_train_other_models.py > train_others.log 2>&1 &
+```
+该脚本同样支持**断网续训防覆盖**机制哦。
+
+### 1.3 离线单一评测 (可选)
+如果您的模型已独立跑好权重并只想做纯粹的测试，可以使用：
 ```bash
 python evaluate_other_models.py
 ```
-**结果归档：**
-汇总表格会自动存入根目录 `data/unified_dataset/other_models_evaluation.txt` 中。
+单测试表格会自动存入 `data/unified_dataset/other_models_evaluation.txt` 中。
 
 ---
 
