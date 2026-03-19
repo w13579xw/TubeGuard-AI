@@ -73,6 +73,13 @@ def train_split(dataset_name, num_epochs=50, batch_size=4, patience=15):
         print(f"⚠️ 跳过 {dataset_name}，目录不存在。")
         return
 
+    results_csv = Path("data/experiments/experiment_results_summary.csv")
+    if results_csv.exists():
+        with open(results_csv, "r", encoding="utf-8") as f:
+            if dataset_name in f.read():
+                print(f"⏩ [断点秒查] 模块 {dataset_name} 已经在总表中拥有了实验数据，自动跨过该测试集直接迈向下一项！")
+                return
+
     print(f"\n{'='*50}")
     print(f"🚀 [Training] 当前数据集切片: {dataset_name}")
     print(f"{'='*50}")
