@@ -15,14 +15,6 @@ import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
-
-# =========================================================================
-# 紧急环境修复：应对某些 Linux 服务器底层 cuDNN 动态匹配引擎不兼容问题
-# "RuntimeError: GET was unable to find an engine to execute this computation"
-# =========================================================================
-torch.backends.cudnn.benchmark = False
-torch.backends.cudnn.deterministic = True
-
 from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
 from PIL import Image
