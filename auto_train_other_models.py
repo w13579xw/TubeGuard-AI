@@ -222,7 +222,7 @@ def main():
     parser.add_argument("--batch_size", type=int, default=16, help="您的 A100 显存极大，我默认为您调升到了16以提速。遇到OOM可自行降回 4。")
     args = parser.parse_args()
 
-    target_dataset = "dataset_all_811"
+    target_datasets = ["dataset_all_811", "dataset_all_622", "dataset_all_532"]
     
     # 按照之前的标准进行统一分辨率对齐与注册库
     all_models = {
@@ -233,16 +233,17 @@ def main():
     
     if args.model == "all":
         models_to_train = list(all_models.values())
-        print(f"🚀 将在目标集 {target_dataset} 上 [串行接力] 对各大经典基线发起考核...")
+        print(f"🚀 将在多比例目标集 {target_datasets} 上 [串行接力] 对各大经典基线发起极限考核...")
     else:
         models_to_train = [all_models[args.model]]
-        print(f"🚀 [并行模式触发] 将在目标集 {target_dataset} 上 [独立核] 打穿训练: {args.model}")
+        print(f"🚀 [并行模式触发] 将在多比例目标集 {target_datasets} 上 [独立核] 打穿训练: {args.model}")
         
     for m_name, m_cls, m_size in models_to_train:
-        train_and_test_other(m_name, m_cls, m_size, target_dataset, 
-                             num_epochs=50, batch_size=args.batch_size, patience=15)
+        for target_dataset in target_datasets:
+            train_and_test_other(m_name, m_cls, m_size, target_dataset, 
+                                 num_epochs=50, batch_size=args.batch_size, patience=15)
         
-    print(f"\n✅ 指令队列执行完毕！请关注 data/experiments/experiment_results_summary.csv")
+    print(f"\n✅ 当前进程包含的切分集评估出图队列执行完毕！请关注 data/experiments/experiment_results_summary.csv")
 
 if __name__ == "__main__":
     main()

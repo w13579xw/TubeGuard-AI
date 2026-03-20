@@ -221,9 +221,11 @@ def train_and_eval_ablation(ablation_name, num_epochs=50, batch_size=4, patience
 
 def main():
     # 本消融实验的设计：对比原版无增幅结构的 YOLOv10 与加入了 TPH 头的模型性能表现。
-    # 按照指示，无需再造控制变量的剥离数据，直接使用已有的全量大一统 8:1:1 混合切分集。
+    # 加入全套 811、622、532 混合切分比例，彻底完成多维度的缩放泛化消融实验对比。
     target_sets = [
-        "dataset_all_811"
+        "dataset_all_811",
+        "dataset_all_622",
+        "dataset_all_532"
     ]
 
     print("=== YOLOv10 (Vanilla) 结构消融性能基线训练 ===")
