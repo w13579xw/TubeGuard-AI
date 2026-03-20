@@ -78,13 +78,13 @@ def train_and_test_other(model_name, model_class, img_size, dataset_name, num_ep
     checkpoint_path = base_dir / f"last_checkpoint_{model_name.replace('/', '_').replace(' ', '_')}.pth"
     results_csv = Path("data/experiments/experiment_results_summary.csv")
 
-    # [断点防复写检测] 如果这份报表里已经有了它的成绩，就直接跳过
+    # [断点防复写检测] 逐行精确匹配：必须同一行同时包含该模型名和该划分名才算已完成
     if results_csv.exists():
         with open(results_csv, "r", encoding="utf-8") as f:
-            content = f.read()
-            if dataset_name in content and model_name in content:
-                print(f"⏩ [断点防复测] 【{model_name}】在【{dataset_name}】上的成绩已经存在于 CSV 大表中，已自动跨过。")
-                return
+            for line in f:
+                if dataset_name in line and model_name in line:
+                    print(f"⏩ [断点防复测] 【{model_name}】在【{dataset_name}】上的成绩已经存在于 CSV 大表中，已自动跨过。")
+                    return
 
     data_transforms = {
         'train': transforms.Compose([
