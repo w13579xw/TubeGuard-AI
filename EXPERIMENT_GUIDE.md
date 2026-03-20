@@ -15,7 +15,7 @@
 
 **训练及同步记录命令 (推荐服务器挂机)：**
 ```bash
-nohup python auto_train_other_models.py > train_others.log 2>&1 &
+nohup python auto_train_other_models.py --model all > log/train_others.log 2>&1 &
 ```
 该脚本同样支持**断网续训防覆盖**机制哦。
 
