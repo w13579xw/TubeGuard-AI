@@ -22,7 +22,7 @@ from tqdm import tqdm
 
 # 注册其他模型的路径
 curr_dir = os.path.dirname(os.path.abspath(__file__))
-for m_path in ["ResNet50", "ViT", "Swin Transformer V2"]:
+for m_path in ["ResNet50", "ViT", "Swin Transformer V2", "VGG19"]:
     p = os.path.join(curr_dir, "NN", m_path)
     if p not in sys.path:
         sys.path.insert(0, p)
@@ -30,6 +30,7 @@ for m_path in ["ResNet50", "ViT", "Swin Transformer V2"]:
 from resnet_model import ResNetBaseline
 from vit_model import ViTBaseline
 from swinv2_model import SwinV2Baseline
+from vgg_model import VGGBaseline
 
 class CSVImageDataset(Dataset):
     """跨平台路径强兼容免拷贝数据集读取逻辑"""
@@ -217,8 +218,8 @@ import argparse
 
 def main():
     parser = argparse.ArgumentParser(description="单点透传启动或并行测试各大基线模型")
-    parser.add_argument("--model", type=str, default="all", choices=["all", "resnet", "vit", "swin"], 
-                        help="指定需要单独训练测试的模型架构：resnet, vit, swin 或 all")
+    parser.add_argument("--model", type=str, default="all", choices=["all", "resnet", "vit", "swin", "vgg"], 
+                        help="指定需要单独训练测试的模型架构：resnet, vit, swin, vgg 或 all")
     parser.add_argument("--batch_size", type=int, default=16, help="您的 A100 显存极大，我默认为您调升到了16以提速。遇到OOM可自行降回 4。")
     args = parser.parse_args()
 
@@ -228,7 +229,8 @@ def main():
     all_models = {
         "resnet": ("ResNet50", ResNetBaseline, 224),
         "vit": ("ViT-B/16", ViTBaseline, 224),
-        "swin": ("SwinV2", SwinV2Baseline, 256)
+        "swin": ("SwinV2", SwinV2Baseline, 256),
+        "vgg": ("VGG19", VGGBaseline, 640)
     }
     
     if args.model == "all":
