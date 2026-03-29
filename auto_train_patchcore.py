@@ -81,7 +81,6 @@ def generate_patchcore_config(dataset_path: str, output_path: str):
                 "normal_dir": "normal/train",
                 "abnormal_dir": "abnormal/test",
                 "normal_test_dir": "normal/test",
-                "task": "CLASSIFICATION",
                 "image_size": [224, 224],
                 "train_batch_size": 32,
                 "eval_batch_size": 32,
