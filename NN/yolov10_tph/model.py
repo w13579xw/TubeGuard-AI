@@ -13,23 +13,35 @@ from ultralytics import YOLO
 # 1. 核心模块: TransformerBlock
 # =========================================================================
 class TransformerBlock(nn.Module):
-    def __init__(self, c1, c2, num_heads=4, num_layers=1):
+    def __init__(self, c1, c2, num_heads=4, num_layers=1, use_ffn=True):
         super().__init__()
         self.conv = nn.Conv2d(c1, c2, kernel_size=1)
         self.linear_emb = nn.Linear(c2, c2)
+        self.use_ffn = use_ffn
 
-        encoder_layer = nn.TransformerEncoderLayer(d_model=c2, nhead=num_heads,
-                                                   dim_feedforward=c2 * 2,
-                                                   dropout=0.1,
-                                                   activation='relu',
-                                                   batch_first=True)
-        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+        if self.use_ffn:
+            encoder_layer = nn.TransformerEncoderLayer(d_model=c2, nhead=num_heads,
+                                                       dim_feedforward=c2 * 2,
+                                                       dropout=0.1,
+                                                       activation='relu',
+                                                       batch_first=True)
+            self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+        else:
+            # 去掉 FFN 层，只保留 Multi-Head Attention, 残差和 LayerNorm
+            self.multihead_attn = nn.MultiheadAttention(c2, num_heads, dropout=0.1, batch_first=True)
+            self.norm = nn.LayerNorm(c2)
 
     def forward(self, x):
         b, c, h, w = x.shape
         x = self.conv(x)
         x = x.flatten(2).permute(0, 2, 1)
-        x = self.transformer(x)
+        
+        if getattr(self, "use_ffn", True):
+            x = self.transformer(x)
+        else:
+            attn_output, _ = self.multihead_attn(x, x, x)
+            x = self.norm(x + attn_output)
+            
         x = x.permute(0, 2, 1).view(b, c, h, w)
         return x
 
@@ -38,7 +50,7 @@ class TransformerBlock(nn.Module):
 # 2. 模型定义: YOLOv10TPHClassifier (严格版)
 # =========================================================================
 class YOLOv10TPHClassifier(nn.Module):
-    def __init__(self, model_weight='yolov10n.pt', num_classes=2):
+    def __init__(self, model_weight='yolov10n.pt', num_classes=2, num_heads=4, use_ffn=True):
         super().__init__()
 
         # --- [改进1] 智能检查并尝试自动下载缺失的预训练权重 ---
@@ -70,7 +82,7 @@ class YOLOv10TPHClassifier(nn.Module):
             print(f"-> Auto-detected Backbone Output Channels: {c_out}")
 
         # --- [改进3] 立即定义层，不再设置为 None ---
-        self.tph = TransformerBlock(c1=c_out, c2=c_out, num_heads=4)
+        self.tph = TransformerBlock(c1=c_out, c2=c_out, num_heads=num_heads, use_ffn=use_ffn)
 
         self.avgpool = nn.AdaptiveAvgPool2d(1)
 
