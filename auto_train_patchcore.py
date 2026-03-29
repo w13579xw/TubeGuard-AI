@@ -68,36 +68,38 @@ def setup_anomalib_dataset_format(src_dir: str, target_dir: str):
     print("✅ Anomalib 格式数据集准备完成！")
 
 def generate_patchcore_config(dataset_path: str, output_path: str):
-    """生成 Anomalib 需要的 yaml 配置文件"""
+    """
+    生成 Anomalib v2+ (Lightning CLI) 支持的 yaml 配置文件
+    新版框架不能写扁平结构，必需指定 class_path 和 init_args。
+    """
     config = {
-        "dataset": {
-            "name": "tubeguard_medical",
-            "format": "folder",
-            "path": dataset_path,
-            "normal_dir": "normal/train",
-            "abnormal_dir": "abnormal/test",
-            "normal_test_dir": "normal/test",
-            "task": "classification",
-            "image_size": [224, 224],
-            "train_batch_size": 32,
-            "eval_batch_size": 32,
-            "num_workers": 8,
-            "transform_config": {"train": None, "eval": None}
+        "data": {
+            "class_path": "anomalib.data.Folder",
+            "init_args": {
+                "name": "tubeguard_medical",
+                "root": dataset_path,
+                "normal_dir": "normal/train",
+                "abnormal_dir": "abnormal/test",
+                "normal_test_dir": "normal/test",
+                "task": "CLASSIFICATION",
+                "image_size": [224, 224],
+                "train_batch_size": 32,
+                "eval_batch_size": 32,
+                "num_workers": 8
+            }
         },
         "model": {
-            "name": "patchcore",
-            "backbone": "wide_resnet50_2",
-            "pre_trained": True,
-            "layers": ["layer2", "layer3"],
-            "coreset_sampling_ratio": 0.1,
-            "num_neighbors": 9
+            "class_path": "anomalib.models.Patchcore",
+            "init_args": {
+                "backbone": "wide_resnet50_2",
+                "pre_trained": True,
+                "layers": ["layer2", "layer3"],
+                "coreset_sampling_ratio": 0.1,
+                "num_neighbors": 9
+            }
         },
         "metrics": {
             "image": ["F1Score", "AUROC", "Accuracy", "Precision", "Recall"]
-        },
-        "project": {
-            "seed": 42,
-            "path": "./results/patchcore"
         },
         "trainer": {
             "max_epochs": 1,
@@ -107,8 +109,8 @@ def generate_patchcore_config(dataset_path: str, output_path: str):
     }
     
     with open(output_path, 'w') as f:
-        yaml.dump(config, f, default_flow_style=False)
-    print(f"✅ 生成 PatchCore 配置文件: {output_path}")
+        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+    print(f"✅ 生成新版 (LightningCLI) PatchCore 配置文件: {output_path}")
 
 if __name__ == '__main__':
     print("\n" + "="*70)
