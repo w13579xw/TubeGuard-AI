@@ -10,9 +10,11 @@ from pathlib import Path
 【核心论点】：无监督会在复杂透明反光的医疗管线制造中因“环境噪光”产生极高的 FPR (False Positive Rate，误报)。
 """
 
+import csv
+
 def setup_anomalib_dataset_format(src_dir: str, target_dir: str):
     """
-    将我们的分类格式转化为 Anomalib 的 Folder/MVTec 结构。
+    基于我们特定的 CSV 指引数据集结构，抽取图片组织为 Anomalib 的 Folder 结构。
     Anomalib 需要:
     target_dir/
         normal/
@@ -21,7 +23,7 @@ def setup_anomalib_dataset_format(src_dir: str, target_dir: str):
         abnormal/
             test/
     """
-    print("🔄 正在构建 Anomalib 对应的 Folder 数据集目录结构...")
+    print("🔄 正在通过解析 CSV 倒流图片，构建 Anomalib 的 Folder 数据集目录结构...")
     src = Path(src_dir)
     tgt = Path(target_dir)
     
@@ -32,36 +34,36 @@ def setup_anomalib_dataset_format(src_dir: str, target_dir: str):
     os.makedirs(tgt / "normal" / "test", exist_ok=True)
     os.makedirs(tgt / "abnormal" / "test", exist_ok=True)
     
-    # 拷贝良品 (Normal) Train/Test
-    # 注意我们在二分类里：0通常是Defect，1通常是Normal。以 ImageFolder 默认字母排序，d 为 abnormal, n 为 normal。
-    # 假设源目录结构为 src/train/0_defect, src/train/1_normal
-    def get_class_folders(split_dir):
-        folders = [f for f in os.listdir(split_dir) if os.path.isdir(os.path.join(split_dir, f))]
-        # 简单判定找 'normal'
-        normal_f = next((f for f in folders if 'normal' in f.lower() or f == '1_normal' or f == '1'), None)
-        defect_f = next((f for f in folders if 'defect' in f.lower() or 'abnormal' in f.lower() or f == '0_defect' or f == '0'), None)
-        return normal_f, defect_f
-        
-    train_norm, _ = get_class_folders(src / "train")
-    test_norm, test_defect = get_class_folders(src / "test")
-    
-    if not train_norm or not test_norm or not test_defect:
-        print("⚠️ 无法自动推断 Normal/Defect 的文件夹名称，请检查源数据目录。")
-        exit(1)
-        
-    print(f"  -> Normal Train: {train_norm}")
-    print(f"  -> Normal Test: {test_norm}")
-    print(f"  -> Abnormal Test: {test_defect}")
-    
-    # 拷贝函数
-    def copy_files(s, d):
-        for f in os.listdir(s):
-            if f.endswith(('png', 'jpg', 'jpeg')):
-                shutil.copy2(os.path.join(s, f), os.path.join(d, f))
+    def process_csv(csv_path, dst_normal, dst_abnormal=None):
+        if not csv_path.exists():
+            print(f"⚠️ 找不到 CSV: {csv_path}")
+            return
+            
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.reader(f)
+            next(reader)  # skip header
+            for i, row in enumerate(reader):
+                if len(row) < 2: continue
+                img_path = str(Path(row[0]).absolute()) # CSV里可能存的是绝对或相对路径
+                lbl = row[1]
                 
-    copy_files(src / "train" / train_norm, tgt / "normal" / "train")
-    copy_files(src / "test" / test_norm, tgt / "normal" / "test")
-    copy_files(src / "test" / test_defect, tgt / "abnormal" / "test")
+                # '1' or '正常'/'Normal' indicates good/normal sample
+                is_normal = False
+                if "有缺陷" not in lbl and "Defective" not in lbl and "0" not in lbl:
+                    is_normal = True
+                
+                try:
+                    if is_normal and dst_normal:
+                        shutil.copy2(img_path, dst_normal / f"{i}_{Path(img_path).name}")
+                    elif not is_normal and dst_abnormal:
+                        shutil.copy2(img_path, dst_abnormal / f"{i}_{Path(img_path).name}")
+                except Exception as e:
+                    pass
+                    
+    # 只拿 Normal 练 Train
+    process_csv(src / "train.csv", tgt / "normal" / "train", None)
+    # Test 则区分 Normal 和 Abnormal
+    process_csv(src / "test.csv", tgt / "normal" / "test", tgt / "abnormal" / "test")
     
     print("✅ Anomalib 格式数据集准备完成！")
 

@@ -5,9 +5,42 @@ from torchvision import datasets, transforms
 import pandas as pd
 from pathlib import Path
 from tqdm import tqdm
+import csv
+from PIL import Image
 
 # 导入带有超参控制的 YOLOv10-TPH
 from NN.yolov10_tph.model import YOLOv10TPHClassifier
+
+class CSVImageDataset(torch.utils.data.Dataset):
+    """跨平台路径强兼容免拷贝数据集读取逻辑"""
+    def __init__(self, csv_file, transform=None):
+        self.data = []
+        self.transform = transform
+        
+        with open(csv_file, 'r', encoding='utf-8') as f:
+            reader = csv.reader(f)
+            next(reader) 
+            for row in reader:
+                if len(row) >= 2:
+                    img_path = row[0]
+                    lbl = row[1]
+                    gt = 0 if ("有缺陷" in lbl or "Defective" in lbl) else 1
+                    self.data.append((img_path, gt))
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        img_path_str, label = self.data[idx]
+        img_path = Path(img_path_str)
+        try:
+            image = Image.open(img_path).convert('RGB')
+        except Exception:
+            image = Image.new('RGB', (640, 640), (0,0,0))
+            
+        if self.transform:
+            image = self.transform(image)
+        return image, label
 
 def train_and_eval(num_heads, use_ffn, device, train_loader, val_loader):
     config_name = f"heads_{num_heads}_ffn_{use_ffn}"
@@ -84,8 +117,8 @@ if __name__ == '__main__':
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
     
-    train_dataset = datasets.ImageFolder(data_dir / 'train', transform=transform)
-    test_dataset = datasets.ImageFolder(data_dir / 'test', transform=transform)
+    train_dataset = CSVImageDataset(data_dir / 'train.csv', transform=transform)
+    test_dataset = CSVImageDataset(data_dir / 'test.csv', transform=transform)
     
     batch_size = 32
     num_workers = 8 # 服务器算力充足，调高
