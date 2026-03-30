@@ -25,21 +25,23 @@ PatchCore 算法核心流程：
 
 
 class PatchCoreModel:
-    """纯 PyTorch 实现的 PatchCore 异常检测模型"""
+    """经 GPU 加速和随机投影优化的 PatchCore 异常检测模型"""
     
     def __init__(self, backbone_name="wide_resnet50_2", layers=("layer2", "layer3"),
-                 coreset_ratio=0.1, num_neighbors=9, device="cuda"):
-        self.device = device
+                 coreset_ratio=0.1, num_neighbors=9, device="cuda", projection_dim=128):
+        self.device = torch.device(device)
         self.layers = layers
         self.coreset_ratio = coreset_ratio
         self.num_neighbors = num_neighbors
+        self.projection_dim = projection_dim
         self.memory_bank = None
+        self.random_projector = None
         
         # 加载预训练骨干网络
         print(f"🧠 正在加载预训练骨干网络: {backbone_name}...", flush=True)
         backbone = getattr(models, backbone_name)(weights="IMAGENET1K_V1")
         backbone.eval()
-        self.backbone = backbone.to(device)
+        self.backbone = backbone.to(self.device)
         
         # 注册 hook 提取中间层特征
         self.features = {}
@@ -55,7 +57,7 @@ class PatchCoreModel:
         return hook
     
     def _extract_features(self, dataloader):
-        """从数据集中提取所有 patch 级别的特征"""
+        """从数据集中提取并降维所有 patch 级别的特征"""
         all_features = []
         
         with torch.no_grad():
@@ -63,7 +65,6 @@ class PatchCoreModel:
                 images = images.to(self.device)
                 _ = self.backbone(images)
                 
-                # 提取并拼接多层特征
                 layer_features = []
                 target_size = None
                 
@@ -72,26 +73,31 @@ class PatchCoreModel:
                     if target_size is None:
                         target_size = feat.shape[2:]
                     else:
-                        # 上采样对齐到最大的空间分辨率
                         feat = nn.functional.interpolate(feat, size=target_size, mode="bilinear", align_corners=False)
                     layer_features.append(feat)
                 
-                # 拼接多层特征: (B, C_total, H, W)
                 combined = torch.cat(layer_features, dim=1)
                 B, C, H, W = combined.shape
-                
-                # 重排为 patch 特征: (B*H*W, C)
                 patches = combined.permute(0, 2, 3, 1).reshape(-1, C)
-                all_features.append(patches.cpu().numpy())
+                
+                # 初始化随机投影矩阵 (Johnson-Lindenstrauss Lemma)
+                if self.random_projector is None:
+                    print(f"🪄 初始化随机投影: {C} 维 -> {self.projection_dim} 维", flush=True)
+                    self.random_projector = torch.randn(C, self.projection_dim).to(self.device)
+                
+                # 执行投影降维，极大减少后续计算量
+                projected_patches = torch.matmul(patches, self.random_projector)
+                all_features.append(projected_patches.cpu())
                 
                 if (batch_idx + 1) % 10 == 0:
                     print(f"   特征提取进度: {batch_idx + 1} 批次已处理", flush=True)
         
-        return np.concatenate(all_features, axis=0)
+        return torch.cat(all_features, dim=0)
     
     def _extract_image_features(self, dataloader):
-        """提取图像级别特征（用于测试时计算每张图的异常分数）"""
+        """批量化 GPU 加速推理"""
         all_scores = []
+        memory_bank_gpu = self.memory_bank.to(self.device)
         
         with torch.no_grad():
             for images, _ in dataloader:
@@ -112,68 +118,74 @@ class PatchCoreModel:
                 combined = torch.cat(layer_features, dim=1)
                 B, C, H, W = combined.shape
                 
-                # 对每张图计算其所有 patch 到 memory bank 的最近邻距离
-                for i in range(B):
-                    patches = combined[i].permute(1, 2, 0).reshape(-1, C).cpu().numpy()
-                    # 计算与 memory bank 的距离
-                    distances = cdist(patches, self.memory_bank, metric="euclidean")
-                    # 每个 patch 的最近邻距离
-                    min_distances = np.min(distances, axis=1)
-                    # 图像级别异常分数 = 所有 patch 最近邻距离的最大值
-                    image_score = np.max(min_distances)
-                    all_scores.append(image_score)
+                # 降维
+                patches = combined.permute(0, 2, 3, 1).reshape(-1, C)
+                projected_patches = torch.matmul(patches, self.random_projector)
+                
+                # 分块计算距离，防止显存爆炸 (Batch-wise distance)
+                # (Batch_Patches, Projection_Dim) vs (Coreset_Size, Projection_Dim)
+                # 使用 PyTorch 向量化计算取代 cdist
+                dist_matrix = torch.cdist(projected_patches, memory_bank_gpu)
+                
+                # 寻找每个 patch 的最近邻
+                min_dists, _ = torch.min(dist_matrix, dim=1)
+                
+                # 还原回图级别分数: (B, H*W) -> (B,)
+                image_scores = min_dists.view(B, -1).max(dim=1)[0]
+                all_scores.append(image_scores.cpu())
         
-        return np.array(all_scores)
+        return torch.cat(all_scores, dim=0).numpy()
     
     def _coreset_subsampling(self, features):
-        """Greedy Coreset Subsampling 压缩 Memory Bank"""
+        """GPU 加速的 Greedy Coreset Subsampling"""
         n_samples = len(features)
         n_select = max(1, int(n_samples * self.coreset_ratio))
         
-        print(f"🔧 Coreset 子采样: 从 {n_samples} 个 patch 特征中选取 {n_select} 个代表...", flush=True)
+        print(f"🔧 GPU 加速 Coreset 选取: 从 {n_samples} 个 patch 特征中选取 {n_select} 个代表...", flush=True)
         
-        if n_select >= n_samples:
-            return features
-            
+        features_gpu = features.to(self.device)
+        
         # 随机选取第一个种子点
         selected_indices = [np.random.randint(n_samples)]
+        selected_features = features_gpu[selected_indices]
         
-        # 计算所有点到已选点集的最小距离
-        min_distances = cdist(features, features[selected_indices], metric="euclidean").min(axis=1)
+        # 初始最小距离
+        min_distances = torch.cdist(features_gpu, selected_features).min(dim=1)[0]
         
         for i in range(1, n_select):
             # 选择距离已选集合最远的点
-            new_idx = np.argmax(min_distances)
+            new_idx = torch.argmax(min_distances).item()
             selected_indices.append(new_idx)
             
-            # 更新最小距离
-            new_distances = cdist(features, features[new_idx:new_idx+1], metric="euclidean").squeeze()
-            min_distances = np.minimum(min_distances, new_distances)
+            # 更新最小距离 (只需计算到新加入点的距离并取 min)
+            new_feature = features_gpu[new_idx:new_idx+1]
+            new_distances = torch.cdist(features_gpu, new_feature).squeeze()
+            min_distances = torch.min(min_distances, new_distances)
             
-            if (i + 1) % 100 == 0:
-                print(f"   Coreset 进度: {i+1}/{n_select}", flush=True)
+            if (i + 1) % 500 == 0:
+                print(f"   Coreset 进度: {i+1}/{n_select} (A100 高速模式)", flush=True)
         
         return features[selected_indices]
     
     def fit(self, train_loader):
-        """训练阶段：从正常样本构建 Memory Bank"""
-        print("\n🏋️ [PatchCore 训练] 开始从正常样本中提取特征并构建 Memory Bank...", flush=True)
+        """训练阶段"""
+        print("\n🏋️ [PatchCore 训练] 开始执行特征提取与降维...", flush=True)
         t0 = time.time()
         
         features = self._extract_features(train_loader)
-        print(f"   原始特征矩阵: {features.shape} (patches × channels)", flush=True)
+        print(f"   降维后特征矩阵: {features.shape}", flush=True)
         
         # Coreset 压缩
         self.memory_bank = self._coreset_subsampling(features)
-        print(f"   压缩后 Memory Bank: {self.memory_bank.shape}", flush=True)
-        print(f"✅ Memory Bank 构建完成！耗时: {time.time()-t0:.1f}s", flush=True)
+        print(f"   最终 Memory Bank: {self.memory_bank.shape}", flush=True)
+        print(f"✅ 训练总耗时: {time.time()-t0:.1f}s", flush=True)
     
     def predict(self, test_loader):
-        """测试阶段：计算每张图的异常分数"""
-        print("\n📊 [PatchCore 测试] 开始在测试集上计算异常分数...", flush=True)
+        """推理阶段"""
+        print("\n📊 [PatchCore 推理] 启动批量 GPU 推理...", flush=True)
         t0 = time.time()
         scores = self._extract_image_features(test_loader)
-        print(f"✅ 异常分数计算完成！耗时: {time.time()-t0:.1f}s", flush=True)
+        print(f"✅ 推理总耗时: {time.time()-t0:.1f}s", flush=True)
         return scores
 
 
