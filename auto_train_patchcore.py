@@ -1,16 +1,17 @@
 import os
 import shutil
-import subprocess
-import yaml
+import csv
 from pathlib import Path
 
 """
 🚀 CII 顶刊强对标实验: 无监督工业 SOTA 跨界对推
-本脚本配置并调用著名的 Anomalib 框架运行 PatchCore 算法，并在医疗管线数据集上验证
-【核心论点】：无监督会在复杂透明反光的医疗管线制造中因“环境噪光”产生极高的 FPR (False Positive Rate，误报)。
+本脚本直接通过 Python API 调用 Anomalib PatchCore 算法，在医疗管线数据集上验证。
+【核心论点】：无监督会在复杂透明反光的医疗管线制造中因"环境噪光"产生极高的 FPR (False Positive Rate，误报)。
+
+⚠️ 不再使用 anomalib CLI（anomalib train），因为 CLI 对可选依赖（wandb/openvino）
+   缺失时会直接禁用 train 子命令。改为直接使用 Python API 调用 Engine，更稳定可靠。
 """
 
-import csv
 
 def setup_anomalib_dataset_format(src_dir: str, target_dir: str):
     """
@@ -23,7 +24,7 @@ def setup_anomalib_dataset_format(src_dir: str, target_dir: str):
         abnormal/
             test/
     """
-    print("🔄 正在通过解析 CSV 倒流图片，构建 Anomalib 的 Folder 数据集目录结构...")
+    print("🔄 正在通过解析 CSV 倒流图片，构建 Anomalib 的 Folder 数据集目录结构...", flush=True)
     src = Path(src_dir)
     tgt = Path(target_dir)
     
@@ -44,10 +45,9 @@ def setup_anomalib_dataset_format(src_dir: str, target_dir: str):
             next(reader)  # skip header
             for i, row in enumerate(reader):
                 if len(row) < 2: continue
-                img_path = str(Path(row[0]).absolute()) # CSV里可能存的是绝对或相对路径
+                img_path = str(Path(row[0]).absolute())
                 lbl = row[1]
                 
-                # '1' or '正常'/'Normal' indicates good/normal sample
                 is_normal = False
                 if "有缺陷" not in lbl and "Defective" not in lbl and "0" not in lbl:
                     is_normal = True
@@ -65,105 +65,147 @@ def setup_anomalib_dataset_format(src_dir: str, target_dir: str):
     # Test 则区分 Normal 和 Abnormal
     process_csv(src / "test.csv", tgt / "normal" / "test", tgt / "abnormal" / "test")
     
-    print("✅ Anomalib 格式数据集准备完成！")
+    # 统计输出
+    n_train = len(list((tgt / "normal" / "train").glob("*")))
+    n_test_normal = len(list((tgt / "normal" / "test").glob("*")))
+    n_test_abnormal = len(list((tgt / "abnormal" / "test").glob("*")))
+    print(f"✅ Anomalib 格式数据集准备完成！训练正常样本: {n_train}, 测试正常: {n_test_normal}, 测试异常: {n_test_abnormal}", flush=True)
 
-def generate_patchcore_config(dataset_path: str, output_path: str):
-    """
-    自动检测 anomalib 版本，生成对应兼容的 YAML 配置文件。
-    - anomalib 1.x: 使用 data 键，支持 task、image_size 参数
-    - anomalib 2.x: 使用 data 键但 Folder 不再接受 task/image_size
-    """
-    import anomalib
-    ver = tuple(int(x) for x in anomalib.__version__.split('.')[:2])
-    print(f"📦 检测到 anomalib 版本: {anomalib.__version__} -> 使用 {'v1.x' if ver[0] < 2 else 'v2.x'} 配置模板")
-    
-    # 通用 data init_args
-    data_init = {
-        "name": "tubeguard_medical",
-        "root": dataset_path,
-        "normal_dir": "normal/train",
-        "abnormal_dir": "abnormal/test",
-        "normal_test_dir": "normal/test",
-        "train_batch_size": 32,
-        "eval_batch_size": 32,
-        "num_workers": 8
-    }
-    
-    if ver[0] < 2:
-        # anomalib 1.x 支持 task 和 image_size
-        data_init["task"] = "classification"
-        data_init["image_size"] = [224, 224]
-        
-    config = {
-        "data": {
-            "class_path": "anomalib.data.Folder",
-            "init_args": data_init
-        },
-        "model": {
-            "class_path": "anomalib.models.Patchcore",
-            "init_args": {
-                "backbone": "wide_resnet50_2",
-                "pre_trained": True,
-                "layers": ["layer2", "layer3"],
-                "coreset_sampling_ratio": 0.1,
-                "num_neighbors": 9
-            }
-        },
-        "metrics": {
-            "image": ["F1Score", "AUROC", "Accuracy", "Precision", "Recall"]
-        },
-        "trainer": {
-            "max_epochs": 1,
-            "accelerator": "gpu",
-            "devices": 1
-        }
-    }
-    
-    with open(output_path, 'w') as f:
-        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
-    print(f"✅ 生成 PatchCore 配置文件: {output_path}")
 
 if __name__ == '__main__':
-    print("\n" + "="*70)
-    print("🔬 [Industrial Baseline] Anomalib PatchCore 无监督抗干扰性极限测试")
-    print("="*70)
+    print("\n" + "="*70, flush=True)
+    print("🔬 [Industrial Baseline] Anomalib PatchCore 无监督抗干扰性极限测试", flush=True)
+    print("="*70, flush=True)
     
     # 检查 anomalib 是否安装
     try:
         import anomalib
-        print(f"✓ 检测到 anomalib 已安装, 版本: {anomalib.__version__}")
+        print(f"✓ 检测到 anomalib 已安装, 版本: {anomalib.__version__}", flush=True)
     except ImportError:
         print("❌ 未检测到 anomalib。请在服务器上运行: pip install anomalib")
-        print("如遇包分发策略变更，请使用: pip install anomalib[full] 或根据官方指南安装。")
         exit(1)
         
     src_dataset = "data/experiments/dataset_all_811"
     ano_dataset = "data/experiments/anomalib_dataset"
-    config_file = "patchcore_config.yaml"
     
     if not os.path.exists(src_dataset):
         print(f"⚠️ 找不到预划分数据集 {src_dataset}。")
         exit(1)
         
     setup_anomalib_dataset_format(src_dataset, ano_dataset)
-    generate_patchcore_config(ano_dataset, config_file)
     
-    print("\n🚀 正在拉起 Anomalib PatchCore 训练与评估线程...")
-    print("提示：服务器上执行如果有异常报错，请确保服务器网络可以通过 HF_ENDPOINT 或配置了合适的预训练权重下载路线 (wide_resnet50_2)")
+    # ========================================================
+    # 直接使用 Python API 调用 anomalib，不走 CLI
+    # ========================================================
+    print("\n🚀 正在通过 Python API 直接拉起 PatchCore 训练与评估...", flush=True)
+    print("提示：首次运行需下载 wide_resnet50_2 预训练权重，请确保服务器有网络连接。", flush=True)
     
-    # 构建命令调用 anomalib CLI
-    # 新版 anomalib 引擎调用方式为: anomalib train --config patchcore_config.yaml
-    cmd = f"anomalib train --config {config_file}"
     try:
-        # Popen to stream output
-        process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-        for line in process.stdout:
-            print(line, end="")
-        process.wait()
+        from anomalib.data import Folder
+        from anomalib.models import Patchcore
+        from anomalib.engine import Engine
         
-        print("\n✅ PatchCore 评测结束。")
-        print("请前往 ./results/patchcore/ 目录查看导出的 CSV 指标日志。")
-        print("重点提取并报告 Precision (以计算高假阳性 FPR) 和 F1-Score 指标用于对线。")
+        # 构建数据模块
+        print("📦 正在构建 Anomalib Folder 数据模块...", flush=True)
+        datamodule = Folder(
+            name="tubeguard_medical",
+            root=ano_dataset,
+            normal_dir="normal/train",
+            abnormal_dir="abnormal/test",
+            normal_test_dir="normal/test",
+            task="classification",
+            image_size=(224, 224),
+            train_batch_size=32,
+            eval_batch_size=32,
+            num_workers=8,
+        )
+        print("✅ 数据模块构建完成！", flush=True)
         
+        # 构建模型
+        print("🧠 正在构建 PatchCore 模型...", flush=True)
+        model = Patchcore(
+            backbone="wide_resnet50_2",
+            pre_trained=True,
+            layers=["layer2", "layer3"],
+            coreset_sampling_ratio=0.1,
+            num_neighbors=9,
+        )
+        print("✅ 模型构建完成！", flush=True)
+        
+        # 构建 Engine 并训练+测试
+        print("⚙️ 正在初始化 Anomalib Engine...", flush=True)
+        engine = Engine(
+            max_epochs=1,
+            accelerator="gpu",
+            devices=1,
+            default_root_dir="results/patchcore",
+        )
+        
+        print("🏋️ 开始 PatchCore 训练（基于 coreset 特征提取，通常只需 1 轮）...", flush=True)
+        engine.fit(model=model, datamodule=datamodule)
+        
+        print("📊 训练完成，开始在测试集上评估...", flush=True)
+        test_results = engine.test(model=model, datamodule=datamodule)
+        
+        print("\n" + "="*70, flush=True)
+        print("✅ PatchCore 评测结束！测试结果如下:", flush=True)
+        print("="*70, flush=True)
+        
+        if test_results:
+            for result in test_results:
+                for key, value in result.items():
+                    print(f"  {key}: {value:.4f}" if isinstance(value, float) else f"  {key}: {value}", flush=True)
+                    
+        print(f"\n📁 详细结果请查看: results/patchcore/ 目录", flush=True)
+        print("重点提取并报告 Precision (以计算高假阳性 FPR) 和 F1-Score 指标用于论文对线。", flush=True)
+        
+    except TypeError as e:
+        # 如果某些参数在当前版本不被接受，尝试精简参数重试
+        print(f"\n⚠️ 参数兼容性问题: {e}", flush=True)
+        print("🔄 尝试使用精简参数重新构建...", flush=True)
+        
+        from anomalib.data import Folder
+        from anomalib.models import Patchcore
+        from anomalib.engine import Engine
+        
+        datamodule = Folder(
+            name="tubeguard_medical",
+            root=ano_dataset,
+            normal_dir="normal/train",
+            abnormal_dir="abnormal/test",
+            normal_test_dir="normal/test",
+            train_batch_size=32,
+            eval_batch_size=32,
+            num_workers=8,
+        )
+        
+        model = Patchcore(
+            backbone="wide_resnet50_2",
+            layers=["layer2", "layer3"],
+            coreset_sampling_ratio=0.1,
+            num_neighbors=9,
+        )
+        
+        engine = Engine(
+            max_epochs=1,
+            accelerator="gpu",
+            devices=1,
+            default_root_dir="results/patchcore",
+        )
+        
+        engine.fit(model=model, datamodule=datamodule)
+        test_results = engine.test(model=model, datamodule=datamodule)
+        
+        print("\n" + "="*70, flush=True)
+        print("✅ PatchCore 评测结束！测试结果如下:", flush=True)
+        print("="*70, flush=True)
+        
+        if test_results:
+            for result in test_results:
+                for key, value in result.items():
+                    print(f"  {key}: {value:.4f}" if isinstance(value, float) else f"  {key}: {value}", flush=True)
+                    
     except Exception as e:
-        print(f"\n❌ 执行时发生错误: {e}")
+        print(f"\n❌ 执行时发生错误: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
