@@ -193,7 +193,7 @@ if __name__ == '__main__':
         train_dataset = CSVImageDataset(data_dir / 'train.csv', transform=transform)
         test_dataset = CSVImageDataset(data_dir / 'test.csv', transform=transform)
         
-        batch_size = 32
+        batch_size = 128
         # 【关键修复】num_workers 必须设为 0
         # Linux 下 PyTorch DataLoader 使用 fork 创建子进程，
         # 但 CUDA 上下文不允许 fork，会导致整个进程死锁卡住。
