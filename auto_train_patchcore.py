@@ -69,23 +69,35 @@ def setup_anomalib_dataset_format(src_dir: str, target_dir: str):
 
 def generate_patchcore_config(dataset_path: str, output_path: str):
     """
-    生成 Anomalib v2+ (Lightning CLI) 支持的 yaml 配置文件
-    新版框架不能写扁平结构，必需指定 class_path 和 init_args。
+    自动检测 anomalib 版本，生成对应兼容的 YAML 配置文件。
+    - anomalib 1.x: 使用 data 键，支持 task、image_size 参数
+    - anomalib 2.x: 使用 data 键但 Folder 不再接受 task/image_size
     """
+    import anomalib
+    ver = tuple(int(x) for x in anomalib.__version__.split('.')[:2])
+    print(f"📦 检测到 anomalib 版本: {anomalib.__version__} -> 使用 {'v1.x' if ver[0] < 2 else 'v2.x'} 配置模板")
+    
+    # 通用 data init_args
+    data_init = {
+        "name": "tubeguard_medical",
+        "root": dataset_path,
+        "normal_dir": "normal/train",
+        "abnormal_dir": "abnormal/test",
+        "normal_test_dir": "normal/test",
+        "train_batch_size": 32,
+        "eval_batch_size": 32,
+        "num_workers": 8
+    }
+    
+    if ver[0] < 2:
+        # anomalib 1.x 支持 task 和 image_size
+        data_init["task"] = "classification"
+        data_init["image_size"] = [224, 224]
+        
     config = {
         "data": {
             "class_path": "anomalib.data.Folder",
-            "init_args": {
-                "name": "tubeguard_medical",
-                "root": dataset_path,
-                "normal_dir": "normal/train",
-                "abnormal_dir": "abnormal/test",
-                "normal_test_dir": "normal/test",
-                "image_size": [224, 224],
-                "train_batch_size": 32,
-                "eval_batch_size": 32,
-                "num_workers": 8
-            }
+            "init_args": data_init
         },
         "model": {
             "class_path": "anomalib.models.Patchcore",
@@ -109,7 +121,7 @@ def generate_patchcore_config(dataset_path: str, output_path: str):
     
     with open(output_path, 'w') as f:
         yaml.dump(config, f, default_flow_style=False, sort_keys=False)
-    print(f"✅ 生成新版 (LightningCLI) PatchCore 配置文件: {output_path}")
+    print(f"✅ 生成 PatchCore 配置文件: {output_path}")
 
 if __name__ == '__main__':
     print("\n" + "="*70)
