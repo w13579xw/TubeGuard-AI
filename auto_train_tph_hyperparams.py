@@ -54,8 +54,11 @@ def train_and_eval(num_heads, use_ffn, device, train_loader, val_loader):
     print(f"{'='*60}", flush=True)
     
     # 初始化模型
+    print(f"[{config_name}] 正在构建 YOLOv10-TPH 模型...", flush=True)
     model = YOLOv10TPHClassifier(model_weight='yolov10n.pt', num_classes=2, num_heads=num_heads, use_ffn=use_ffn)
+    print(f"[{config_name}] 模型构建完毕，正在移动到设备 {device}...", flush=True)
     model.to(device)
+    print(f"[{config_name}] 模型已就绪，开始训练循环。", flush=True)
     
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-4)
     criterion = nn.CrossEntropyLoss()
@@ -191,9 +194,14 @@ if __name__ == '__main__':
         test_dataset = CSVImageDataset(data_dir / 'test.csv', transform=transform)
         
         batch_size = 32
-        num_workers = 4 # 并行状态中拉低预抓取并发上限即可防止系统运存不足 OOM
+        # 【关键修复】num_workers 必须设为 0
+        # Linux 下 PyTorch DataLoader 使用 fork 创建子进程，
+        # 但 CUDA 上下文不允许 fork，会导致整个进程死锁卡住。
+        # 设为 0 表示在主进程中加载数据，彻底规避此问题。
+        num_workers = 0
         train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=num_workers)
         test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size*2, shuffle=False, pin_memory=True, num_workers=num_workers)
+        print(f"[{config_name}] 数据集加载完毕: 训练集 {len(train_dataset)} 张, 测试集 {len(test_dataset)} 张", flush=True)
 
         h = args.num_heads
         ffn = bool(args.use_ffn)
