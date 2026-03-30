@@ -112,6 +112,13 @@ def train_and_eval(num_heads, use_ffn, device, train_loader, val_loader):
 
 
 if __name__ == '__main__':
+    # 【非常关键】：解决 Linux 下 CUDA Dataloader fork 死锁导致的卡住问题
+    import multiprocessing as mp
+    try:
+        mp.set_start_method('spawn', force=True)
+    except RuntimeError:
+        pass
+        
     parser = argparse.ArgumentParser()
     parser.add_argument('--num_heads', type=int, default=-1, help='TPH 注意力头数 (-1 为启动所有)')
     parser.add_argument('--use_ffn', type=int, default=-1, help='是否使用 FFN (1/0)')
@@ -125,7 +132,7 @@ if __name__ == '__main__':
     ]
     
     out_csv = "data/experiments/tph_hyperparam_ablation.csv"
-    log_dir = "data/experiments/logs"
+    log_dir = "log" # 修改为统一存到根目录的 log 文件夹下
 
     if args.num_heads == -1:
         # 并行调度模式
