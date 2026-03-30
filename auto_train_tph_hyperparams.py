@@ -122,6 +122,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--num_heads', type=int, default=-1, help='TPH 注意力头数 (-1 为启动所有)')
     parser.add_argument('--use_ffn', type=int, default=-1, help='是否使用 FFN (1/0)')
+    parser.add_argument('--merge_only', action='store_true', help='仅执行结果合并')
     args = parser.parse_args()
 
     configs = [
@@ -135,55 +136,37 @@ if __name__ == '__main__':
     log_dir = "log" # 修改为统一存到根目录的 log 文件夹下
 
     if args.num_heads == -1:
-        # 并行调度模式
-        os.makedirs(log_dir, exist_ok=True)
-        print("🚀 正在启动并行消融实验（带有基于验证集的早停机制）...", flush=True)
-        
-        processes = []
-        log_files = []
-        
+        print("🚀 已取消内置的自动多进程并发，以避免 Ultralytics 权重加载阶段的文件锁/显存抢占死锁。")
+        print("\n请在服务器的 TMUX 或不同的终端窗口中，手动并行（或排队）执行以下四条命令：")
+        print("-" * 60)
         for c in configs:
             h, ffn = c["num_heads"], c["use_ffn"]
             ffn_int = 1 if ffn else 0
-            
-            # 为每个单独的子进程配置独立的日志输出文件（既避免交错干扰也方便查阅）
-            log_path = os.path.join(log_dir, f"train_log_heads{h}_ffn{ffn_int}.txt")
-            log_f = open(log_path, "w", encoding="utf-8")
-            log_files.append(log_f)
-            
-            # 启动子进程，将标准输出和错误流重定向到该文件
-            cmd = [sys.executable, __file__, '--num_heads', str(h), '--use_ffn', str(ffn_int)]
-            p = subprocess.Popen(cmd, stdout=log_f, stderr=subprocess.STDOUT)
-            processes.append(p)
-            print(f"   ▶️ 成功派生并行子进程 -> heads={h}, ffn={bool(ffn_int)} (日志将被持续写入至: {log_path})")
-            
-        print(f"⏱️ 所有 {len(processes)} 个子进程已发车，请在对应日志文件中查阅各自的训练进度...", flush=True)
-        
-        for p in processes:
-            p.wait()
-            
-        for log_f in log_files:
-            log_f.close()
-            
-        print("\n✅ 所有并行训练子进程已退出，正在汇总最终早停收敛结果...", flush=True)
-        
-        # 结果汇总
+            log_path = f"log/train_log_heads{h}_ffn{ffn_int}.txt"
+            cmd = f"nohup python auto_train_tph_hyperparams.py --num_heads {h} --use_ffn {ffn_int} > {log_path} 2>&1 &"
+            print(cmd)
+        print("-" * 60)
+        print("\n提示：为避免多个进程同时下载预训练权重导致死锁，建议先直接运行第一条启动，等它输出开始 Epoch 1 后，再启动后面三条。")
+        print("训练完成后，使用以下命令即可在任意目录下自动聚合它们跑出来的临时结果文件:")
+        print("python auto_train_tph_hyperparams.py --merge_only")
+
+    elif hasattr(args, 'merge_only') and args.merge_only:
+        # 手动汇总结果模式
         results_df_list = []
         for c in configs:
             h, ffn = c["num_heads"], c["use_ffn"]
             res_file = f"data/experiments/tmp_res_h{h}_f{1 if ffn else 0}.csv"
             if os.path.exists(res_file):
                 results_df_list.append(pd.read_csv(res_file))
-                os.remove(res_file) # 删除临时文件
                 
         if results_df_list:
             final_df = pd.concat(results_df_list, ignore_index=True)
             os.makedirs(os.path.dirname(out_csv), exist_ok=True)
             final_df.to_csv(out_csv, index=False)
-            print(f"✅ TPH 架构并行消融实验已跑齐！融合结果已存至: {out_csv}", flush=True)
-            print(final_df, flush=True)
+            print(f"✅ TPH 架构并行消融实验汇总完成！结果已存至: {out_csv}")
+            print(final_df)
         else:
-            print("❌ 未能聚合汇总临时结果表，请检查对应子进程日志探查是否存在故障报错。", flush=True)
+            print("❌ 未能聚合汇总结果，当前尚未生成任何实验产出文件。")
             
     else:
         # 实际训练执行逻辑
