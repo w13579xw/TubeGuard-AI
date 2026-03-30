@@ -47,6 +47,8 @@ class CSVImageDataset(torch.utils.data.Dataset):
         return image, label
 
 
+from tqdm import tqdm
+
 def train_and_eval(num_heads, use_ffn, device, train_loader, val_loader):
     config_name = f"heads_{num_heads}_ffn_{use_ffn}"
     print(f"\n{'='*60}", flush=True)
@@ -73,21 +75,29 @@ def train_and_eval(num_heads, use_ffn, device, train_loader, val_loader):
     for epoch in range(max_epochs):
         model.train()
         train_loss = 0.0
-        for inputs, labels in train_loader:
+        
+        # 使用 tqdm 展示 Batch 进度
+        pbar = tqdm(train_loader, desc=f"Epoch {epoch+1:03d}/{max_epochs} [Train]", leave=False)
+        for inputs, labels in pbar:
             inputs, labels = inputs.to(device), labels.to(device)
             optimizer.zero_grad()
             outputs = model(inputs)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
-            train_loss += loss.item()
+            
+            curr_loss = loss.item()
+            train_loss += curr_loss
+            pbar.set_postfix({"loss": f"{curr_loss:.4f}"})
             
         # 验证
         model.eval()
         all_preds = []
         all_labels = []
+        
+        val_pbar = tqdm(val_loader, desc=f"Epoch {epoch+1:03d}/{max_epochs} [Val]", leave=False)
         with torch.no_grad():
-            for inputs, labels in val_loader:
+            for inputs, labels in val_pbar:
                 inputs, labels = inputs.to(device), labels.to(device)
                 outputs = model(inputs)
                 _, preds = torch.max(outputs, 1)
@@ -98,12 +108,15 @@ def train_and_eval(num_heads, use_ffn, device, train_loader, val_loader):
         prec, rec, f1, _ = precision_recall_fscore_support(all_labels, all_preds, average='binary', zero_division=0)
         
         avg_loss = train_loss / len(train_loader) if len(train_loader) > 0 else 0
-        print(f"[{config_name}] Epoch {epoch+1:03d}/{max_epochs} -> Loss: {avg_loss:.4f} | Acc: {acc:.4f} | Prec: {prec:.4f} | Rec: {rec:.4f} | F1: {f1:.4f} | (No improve: {epochs_no_improve})", flush=True)
+        
+        # 打印 epoch 汇总
+        print(f"[{config_name}] Epoch {epoch+1:03d} Final -> Loss: {avg_loss:.4f} | Acc: {acc:.4f} | Prec: {prec:.4f} | Rec: {rec:.4f} | F1: {f1:.4f} | (Best F1: {best_f1:.4f})", flush=True)
         
         if f1 > best_f1:
             best_f1 = f1
             best_metrics = (acc, prec, rec, f1)
             epochs_no_improve = 0
+            print(f"[{config_name}] ⭐ 性能提升！当前最佳 F1 更新为: {best_f1:.4f}", flush=True)
         else:
             epochs_no_improve += 1
             
