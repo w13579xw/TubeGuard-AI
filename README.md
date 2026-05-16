@@ -7,7 +7,6 @@
 [![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-blue?logo=python)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.x-EE4C2C?logo=pytorch)](https://pytorch.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Paper](https://img.shields.io/badge/Paper-Submitted-orange)](paper/submission_package/)
 
 ---
 
@@ -29,7 +28,7 @@
 5. [基线模型库](#5-基线模型库)
 6. [数据增强与合成](#6-数据增强与合成)
 7. [PatchCore 无监督异常检测](#7-patchcore-无监督异常检测)
-8. [论文图表与可视化](#8-论文图表与可视化)
+8. [可视化分析](#8-可视化分析)
 9. [环境配置](#9-环境配置)
 10. [实验结果与性能分析](#10-实验结果与性能分析)
 11. [引用](#11-引用)
@@ -81,43 +80,7 @@
 - **状态**: 已投稿 (2026年4月)
 - **论文标题**: YOLOv10-TPH: A Hybrid CNN-Transformer Architecture for Medical IV Tube Defect Detection
 
-### 2.2 论文文件
-
-所有论文相关文件位于 `paper/submission_package/` 目录：
-
-```
-paper/submission_package/
-├── ComputersInIndustry_manuscript.tex    # 主论文 LaTeX 源文件
-├── manuscript.pdf                        # 编译后的 PDF
-├── ComputersInIndustry_references.bib    # 参考文献
-├── IEEEtran.cls                          # LaTeX 文档类
-├── title_page.txt                        # 标题页（作者信息）
-├── Highlights.docx                       # 论文亮点
-├── Acknowledgments.docx                  # 致谢
-├── Declaration of Interest Statement.docx # 利益声明
-├── Measurement_Cover Letter.docx         # 投稿信
-├── Measurement_title-page.docx           # 期刊标题页
-├── assets/                               # 所有图表文件
-│   ├── model_architecture.png            # 模型架构图
-│   ├── training_curves.png               # 训练曲线
-│   ├── precision_recall_radar.png        # 性能雷达图
-│   ├── ablation_study_f1_comparison.png  # 消融实验
-│   ├── cross_architecture_comparison.png # 跨架构对比
-│   ├── full_performance_comparison.png   # 完整性能对比
-│   ├── data_efficiency_analysis.png      # 数据效率分析
-│   ├── f1_stability_boxplot.png          # F1 稳定性箱线图
-│   ├── tph_ablation_f1.png              # TPH 超参数消融
-│   ├── bottleneck.png                    # Bottleneck 模块图
-│   ├── c2f_module.png                    # C2f 模块图
-│   ├── mhsa_detail.png                   # MHSA 细节图
-│   ├── scdown_module.png                 # SCDown 模块图
-│   ├── tph_module.png                    # TPH 模块图
-│   └── CAM_*.jpg                        # Grad-CAM 可视化
-├── SUBMISSION_CHECKLIST.txt              # 投稿检查清单
-└── FORMATTING_MODIFICATIONS_SUMMARY.txt  # 格式修改总结
-```
-
-### 2.3 论文核心内容
+### 2.2 论文核心内容
 
 **摘要**：医疗静脉输液管制造需要零缺陷质量控制，但透明材料带来严重的光学挑战。本文提出 YOLOv10-TPH，一种混合 CNN-Transformer 架构，解决了缺陷检测中的精确率-召回率悖论。
 
@@ -194,48 +157,7 @@ NN/
     └── train.py                     # YOLOv10-TPH 训练脚本，含消融实验支持
 ```
 
-### 4.2 论文与投稿文件 (paper/)
-
-```
-paper/
-├── submission_package/                  # 期刊投稿文件包
-│   ├── ComputersInIndustry_manuscript.tex  # 主论文 LaTeX 源文件
-│   ├── manuscript.pdf                   # 编译后的 PDF
-│   ├── ComputersInIndustry_references.bib # 参考文献
-│   ├── IEEEtran.cls                     # LaTeX 文档类
-│   ├── title_page.txt                   # 标题页（作者信息）
-│   ├── assets/                          # 所有图表文件
-│   │   ├── model_architecture.png       # 模型架构图
-│   │   ├── training_curves.png          # 训练曲线
-│   │   ├── precision_recall_radar.png   # 性能雷达图
-│   │   ├── ablation_study_f1_comparison.png  # 消融实验
-│   │   ├── cross_architecture_comparison.png # 跨架构对比
-│   │   ├── full_performance_comparison.png   # 完整性能对比
-│   │   ├── data_efficiency_analysis.png      # 数据效率分析
-│   │   ├── f1_stability_boxplot.png     # F1 稳定性箱线图
-│   │   ├── tph_ablation_f1.png          # TPH 超参数消融
-│   │   ├── bottleneck.png               # Bottleneck 模块图
-│   │   ├── c2f_module.png               # C2f 模块图
-│   │   ├── mhsa_detail.png              # MHSA 细节图
-│   │   ├── scdown_module.png            # SCDown 模块图
-│   │   ├── tph_module.png               # TPH 模块图
-│   │   └── CAM_*.jpg                   # Grad-CAM 可视化
-│   ├── SUBMISSION_CHECKLIST.txt         # 投稿检查清单
-│   └── FORMATTING_MODIFICATIONS_SUMMARY.txt  # 格式修改总结
-│
-├── 4.3论文修改意见.pdf                   # 审稿意见
-├── writing_and_formatting.txt           # 期刊格式要求
-├── COMPILATION_INSTRUCTIONS.md          # 论文编译说明
-├── FIGURE_GENERATION_GUIDE.md           # 图表生成指南
-├── TPH_MODULE_ANALYSIS.md               # TPH 模块详细分析
-├── LABELING_PROTOCOL.md                 # 标注协议说明
-├── analyze_tex.py                       # LaTeX 文件分析工具
-├── compress.py                          # 图片压缩工具
-├── generate_ablation_fig.py             # 消融实验图表生成
-└── plot_experiment_results.py           # 实验结果绘图
-```
-
-### 4.3 数据增强与合成 (data_augmentation/)
+### 4.2 数据增强与合成 (data_augmentation/)
 
 ```
 data_augmentation/
@@ -248,7 +170,7 @@ data_augmentation/
     └── sd_synthesizer.py            # SD 合成器封装类
 ```
 
-### 4.4 数据预处理 (preprocessing/)
+### 4.3 数据预处理 (preprocessing/)
 
 ```
 preprocessing/
@@ -258,36 +180,19 @@ preprocessing/
 └── wavelet_enhance_fix小波增强.py    # 小波增强算法修复版本
 ```
 
-### 4.5 数据集管理 (data/)
+### 4.4 实验数据集 (data/experiments/)
 
 ```
-data/
-├── unified_dataset/                 # 统一数据集
-│   └── dataset.yaml                 # 数据集配置文件
-├── defect_test/                     # 缺陷测试集
-├── defect_test_heatmaps/            # 缺陷热力图可视化
-├── experiments/                     # 实验数据记录
-├── results/                         # 实验结果输出
-├── images/                          # 图像资源
-├── train.csv                        # 训练集标注
-└── test.csv                         # 测试集标注
+data/experiments/
+├── dataset_all_532/                 # 5:3:2 数据划分
+│   ├── train.csv / val.csv / test.csv
+├── dataset_all_622/                 # 6:2:2 数据划分
+│   ├── train.csv / val.csv / test.csv
+└── dataset_all_811/                 # 8:1:1 数据划分
+    ├── train.csv / val.csv / test.csv
 ```
 
-### 4.6 数据存储 (raw_data/ & processed_data/)
-
-```
-raw_data/                            # 原始数据
-├── train/                           # 训练集
-├── val/                             # 验证集
-└── test/                            # 测试集
-
-processed_data/                      # 预处理后数据
-├── train/                           # 训练集
-├── val/                             # 验证集
-└── test/                            # 测试集
-```
-
-### 4.7 自动化训练与评估脚本
+### 4.5 自动化训练脚本
 
 ```
 auto_train_ablation.py               # TPH 消融实验自动化训练
@@ -297,49 +202,12 @@ auto_train_splits.py                 # 数据划分自动化训练
 auto_train_tph_hyperparams.py        # TPH 超参数搜索
 ```
 
-### 4.8 评估与分析脚本
-
-```
-evaluate_baseline_unified.py         # 基线模型统一评估
-evaluate_defects_yolov10tph.py       # YOLOv10-TPH 缺陷评估
-evaluate_other_models.py             # 其他模型评估
-evaluate_unified_yolov10tph.py       # 统一数据集评估
-plot_experiment_results.py           # 实验结果绘图
-generate_ablation_fig.py             # 消融实验图表生成
-```
-
-### 4.9 资源与工具 (res/)
-
-```
-res/
-├── yolov10n-cls-custom.yaml         # YOLOv10 自定义配置
-├── DeepLabV3.py                     # DeepLabV3 模型实现
-├── PatchCore.py                     # PatchCore 异常检测
-├── VGG19(Baseline).py               # VGG19 基线实现
-├── YOLOv10-CBAM.py                  # YOLOv10-CBAM 模型
-├── YOLOv10.py                       # YOLOv10 标准实现
-├── augment.py                       # 数据增强实现
-├── augment2.py                      # 增强算法版本2
-├── main.py                          # 主程序入口
-├── model.py                         # 通用模型定义
-├── preprocessor.py                  # 数据预处理器
-└── vmamba/                          # VMamba 模型
-    ├── train_vmamba.py              # VMamba 训练脚本
-    └── vmamba_model.py              # VMamba 模型定义
-```
-
-### 4.10 完整实验流程
+### 4.6 完整实验流程
 
 ```
 run_all_experiments.py               # 端到端完整实验流程
 build_unified_dataset.py             # 统一数据集构建
 build_experiment_datasets.py         # 实验数据集构建
-```
-
-### 4.11 训练日志 (log/)
-
-```
-log/                                 # 训练日志与输出记录
 ```
 
 ---
@@ -398,7 +266,7 @@ log/                                 # 训练日志与输出记录
 | 主干网络 | Swin-T V2；层次化移位窗口自注意力机制 |
 | 优势 | 通过窗口分区原生支持高分辨率输入，计算复杂度 $O(n)$ |
 | 定位 | 主 **Transformer 对比基线**——评估层次化 vs. 全局注意力效果 |
-| 关键文件 | `swin_model.py`、`train_swin.py` |
+| 关键文件 | `swinv2_model.py`、`train_swinv2.py` |
 
 ---
 
@@ -505,7 +373,7 @@ SD 模型 + 缺陷提示词工程
 
 ## 7. PatchCore 无监督异常检测
 
-PatchCore 通过构建正常区域特征记忆库来实现工业缺陷的自动筛查。
+PatchCore 通过构建正常区域特征记忆库实现无监督缺陷筛查。
 
 ### 7.1 PatchCore 核心原理
 
@@ -540,58 +408,34 @@ PatchCore 通过构建正常区域特征记忆库来实现工业缺陷的自动�
 - YOLOv10-TPH 精准分类，减少误报
 - 两级检测提升系统鲁棒性
 
-## 8. 论文图表与可视化
+## 8. 可视化分析
 
-本项目的实验结果已通过专业的 IEEE Transactions 格式图表展示，所有图表均已生成并保存在 `paper/assets/` 目录中：
+### 8.1 Grad-CAM 注意力可视化
 
-### 8.1 核心性能图表
+仓库中包含 5 个 Grad-CAM 热力图（`NN/yolov10_tph/CAM_*.jpg`），展示模型对缺陷区域的注意力机制：
 
-| 图表编号 | 文件名 | 描述 | 位置 |
-|----------|--------|------|------|
-| Fig. 1 | `training_curves.png` | 训练进度曲线 - 展示模型在100个epoch内的收敛过程 | Section III.A |
-| Fig. 2 | `data_efficiency_analysis.png` | 数据效率分析 - 不同训练数据量下的性能对比 | Section III.B |
-| Fig. 3 | `full_performance_comparison.png` | 完整性能对比 - 6个模型的4个指标综合对比 | Section III.E |
-| Fig. 4 | `ablation_study_f1_comparison.png` | 消融实验 - TPH模块的性能提升效果 | Section III.B |
-| Fig. 5 | `cross_architecture_comparison.png` | 跨架构对比 - 6个模型在3种数据划分下的F1对比 | Section III.C |
-| Fig. 6 | `precision_recall_radar.png` | 雷达图 - 精确率、召回率、准确率三维度对比 | Section III.C |
-| Fig. 7 | `model_architecture.png` | 模型架构图 - YOLOv10-TPH的详细网络结构 | Section II.A |
+| 文件名 | 位置 |
+|--------|------|
+| `CAM_68.jpg` | `NN/yolov10_tph/` |
+| `CAM_1320.jpg` | `NN/yolov10_tph/` |
+| `CAM_1438.jpg` | `NN/yolov10_tph/` |
+| `CAM_1439_1.jpg` | `NN/yolov10_tph/` |
+| `CAM_2999_0.jpg` | `NN/yolov10_tph/` |
 
-### 8.2 Grad-CAM 注意力可视化
+### 8.2 混淆矩阵
 
-4个 Grad-CAM 热力图展示模型对缺陷区域的注意力机制：
+各模型的混淆矩阵图片位于对应目录下：
 
-| 文件名 | 描述 | 缺陷类型 |
-|--------|------|----------|
-| `CAM_232_aug_combined_1.jpg` | 复合损伤 - 高度局部化激活 | 多缺陷 |
-| `CAM_25_aug_combined_3.jpg` | 隐藏裂纹 - 识别细微缺陷 | 裂纹 |
-| `CAM_72_aug_combined_3.jpg` | 划痕检测 - 沿划痕路径的强激活 | 划痕 |
-| `CAM_253_aug_combined_4.jpg` | 清洁样本 - 分布式低强度背景注意 | 正常 |
+| 文件 | 位置 |
+|------|------|
+| `resnet_confusion_matrix.png` | `NN/ResNet50/` |
+| `vgg_confusion_matrix.png` | `NN/VGG19/` |
+| `vit_confusion_matrix.png` | `NN/ViT/` |
+| `swinv2_confusion_matrix.png` | `NN/Swin Transformer V2/` |
+| `baseline_confusion_matrix.png` | `NN/yolov10/raw/` |
+| `confusion_matrix.png` | `NN/yolov10_tph/processed/` |
 
-### 8.3 图表质量规格
-
-所有图表均为印刷级质量：
-- **格式**: PNG (300 DPI)
-- **字体**: Times New Roman (与LaTeX兼容)
-- **尺寸**: 适合 IEEE Transactions 双栏格式 (0.48\textwidth)
-- **色彩**: 专业的配色方案，适合学术论文发表
-
-### 8.4 编译说明
-
-**Overleaf (推荐)**:
-1. 上传 `submission_package/` 目录下所有文件
-2. 点击 **Recompile**
-3. 等待编译完成
-
-**本地编译**:
-```bash
-cd paper/submission_package
-pdflatex ComputersInIndustry_manuscript.tex
-bibtex ComputersInIndustry_manuscript
-pdflatex ComputersInIndustry_manuscript.tex
-pdflatex ComputersInIndustry_manuscript.tex
-```
-
-### 8.5 论文核心贡献
+### 8.3 论文核心贡献
 
 1. **YOLOv10-TPH 架构**: 首创的 Transformer 预测头增强微小缺陷检测，F1分数提升4.57%
 2. **系统性对比**: 6个主流模型在统一数据集上的全面性能分析，涵盖CNN、Transformer和检测架构
@@ -720,31 +564,6 @@ pip install opencv-python scikit-image diffusers accelerate
 - **环境扰动**：老旧磨损、光照变化 → 标记为正常 (0)
 - **关键原则**：只有真正影响结构完整性的破坏才被视为缺陷
 
-
-### 10.5 可视化分析
-
-论文包含 6 个核心图表：
-
-1. **训练曲线** (`training_curves.png`): 100个epoch收敛过程，验证集性能持续优于训练集
-2. **数据效率分析** (`data_efficiency_analysis.png`): TPH在不同数据量下的鲁棒性
-3. **消融实验F1对比** (`ablation_study_f1_comparison.png`): TPH模块的+4.57%性能提升
-4. **跨架构对比** (`cross_architecture_comparison.png`): 6个模型在3种数据划分下的全面对比
-5. **性能雷达图** (`precision_recall_radar.png`): 精确率、召回率、准确率三维度可视化
-6. **完整性能对比** (`full_performance_comparison.png`): 6个模型的4个指标综合柱状图
-
-### 10.6 Grad-CAM 注意力可视化
-
-4个Grad-CAM热力图展示模型决策过程：
-
-- **复合损伤**: 高度局部化激活，精准定位多缺陷区域
-- **隐藏裂纹**: 识别肉眼难以察觉的细微缺陷
-- **划痕检测**: 沿划痕路径的强注意力响应
-- **清洁样本**: 分布式低强度背景注意，无误报激活
-
-这些可视化直接证实TPH模块：
-- 激活集中在真正的缺陷形态上
-- 有效抑制背景伪影（镜面反射、阴影）
-- 保留空间细节进行精确分类
 
 ## 11. 引用
 
