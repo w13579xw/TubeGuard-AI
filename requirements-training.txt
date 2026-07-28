@@ -6,3 +6,4 @@ torch
 torchvision
 tqdm
 ultralytics
+transformers>=4.46
