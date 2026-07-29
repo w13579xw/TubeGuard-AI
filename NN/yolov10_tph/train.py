@@ -310,6 +310,12 @@ def main():
     args.output_dir.mkdir(parents=True, exist_ok=True)
     logger, log_path = setup_logger(args.log_dir)
     logger.info("Log file: %s", log_path)
+    script_path = Path(__file__).resolve()
+    logger.info("Training script: %s", script_path)
+    logger.info(
+        "Command: %s",
+        " ".join([str(script_path), *sys.argv[1:]]),
+    )
     logger.info("Arguments: %s", json.dumps(vars(args), default=str, ensure_ascii=False))
 
     seed_everything(args.seed)
