@@ -11,9 +11,14 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import sys
+import traceback
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
+from datetime import datetime
 from pathlib import Path
 
 import torch
+from filelock import FileLock
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
@@ -44,6 +49,68 @@ COMPARISON_MODELS = [
     "deformable_detr_r50",
     "yolov10_tph",
 ]
+RESULT_FIELDS = [
+    "experiment",
+    "model",
+    "split",
+    "n",
+    "accuracy",
+    "precision",
+    "recall",
+    "f1",
+    "specificity",
+    "roc_auc",
+    "tp",
+    "fp",
+    "tn",
+    "fn",
+]
+
+
+class Tee:
+    """Write stdout/stderr to both the terminal and a persistent log file."""
+
+    def __init__(self, terminal, log_file):
+        self.terminal = terminal
+        self.log_file = log_file
+
+    def write(self, text):
+        self.terminal.write(text)
+        self.log_file.write(text)
+        self.flush()
+        return len(text)
+
+    def flush(self):
+        self.terminal.flush()
+        self.log_file.flush()
+
+    def isatty(self):
+        return self.terminal.isatty()
+
+    def __getattr__(self, name):
+        return getattr(self.terminal, name)
+
+
+@contextmanager
+def experiment_logging(log_dir: Path, name: str):
+    """Append one complete training/evaluation run to log/<...>/<name>.log."""
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / f"{name}.log"
+    with log_path.open("a", encoding="utf-8", buffering=1) as log_file:
+        stdout_tee = Tee(sys.stdout, log_file)
+        stderr_tee = Tee(sys.stderr, log_file)
+        with redirect_stdout(stdout_tee), redirect_stderr(stderr_tee):
+            started = datetime.now().astimezone().isoformat(timespec="seconds")
+            print(f"\n{'=' * 80}\nrun={name} started={started}\nlog={log_path}")
+            try:
+                yield log_path
+            except Exception:
+                print(f"run={name} status=FAILED")
+                traceback.print_exc()
+                raise
+            else:
+                finished = datetime.now().astimezone().isoformat(timespec="seconds")
+                print(f"run={name} status=COMPLETED finished={finished}")
 
 
 def parse_args():
@@ -55,6 +122,12 @@ def parse_args():
     parser.add_argument("--variants", nargs="+", default=list(ABLATIONS))
     parser.add_argument("--manifest-dir", type=Path, default=Path("data/reviewer_revision"))
     parser.add_argument("--output-dir", type=Path, default=Path("runs/reviewer_revision"))
+    parser.add_argument("--log-dir", type=Path, default=Path("log/reviewer_revision"))
+    parser.add_argument(
+        "--summary-csv",
+        type=Path,
+        help="Default: <output-dir>/real_test_summary.csv",
+    )
     parser.add_argument("--train-csv", type=Path, default=Path("data/train.csv"))
     parser.add_argument("--real-test-csv", type=Path, default=Path("data/test.csv"))
     parser.add_argument("--image-dir", type=Path, default=Path("data/images"))
@@ -116,7 +189,7 @@ def make_transforms(img_size):
     return plain, augmented
 
 
-def run_one(args, name, spec):
+def _run_one(args, name, spec):
     seed_everything(args.seed)
     device = torch.device(
         args.device or ("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -170,7 +243,57 @@ def run_one(args, name, spec):
         args.hnm_boost,
         config,
     )
-    evaluate_checkpoint(args, experiment_dir)
+    # Avoid holding two full networks on the GPU while the best checkpoint is
+    # reloaded for the mandatory post-training evaluation.
+    del model
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
+    result = evaluate_checkpoint(args, experiment_dir)
+    update_summary_csv(args.summary_csv, result)
+    return result
+
+
+def run_one(args, name, spec):
+    with experiment_logging(args.log_dir, name):
+        print(
+            f"experiment={name} model={spec['model']} "
+            f"augmentation={spec['augmentation']} hnm={spec['hnm']}"
+        )
+        return _run_one(args, name, spec)
+
+
+def write_result_csv(path: Path, result: dict):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=RESULT_FIELDS)
+        writer.writeheader()
+        writer.writerow({field: result.get(field, "") for field in RESULT_FIELDS})
+
+
+def update_summary_csv(path: Path, result: dict):
+    """Atomically upsert a result; FileLock makes parallel GPU jobs safe."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock = FileLock(str(path) + ".lock", timeout=120)
+    with lock:
+        rows = []
+        if path.exists():
+            with path.open("r", encoding="utf-8-sig", newline="") as handle:
+                rows = list(csv.DictReader(handle))
+        key = (str(result["experiment"]), str(result["split"]))
+        rows = [
+            row
+            for row in rows
+            if (row.get("experiment"), row.get("split")) != key
+        ]
+        rows.append({field: result.get(field, "") for field in RESULT_FIELDS})
+        rows.sort(key=lambda row: (str(row["experiment"]), str(row["split"])))
+        temporary = path.with_suffix(path.suffix + ".tmp")
+        with temporary.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=RESULT_FIELDS)
+            writer.writeheader()
+            writer.writerows(rows)
+        temporary.replace(path)
+    print(f"Updated summary CSV: {path}")
 
 
 def evaluate_checkpoint(args, experiment_dir: Path):
@@ -201,6 +324,7 @@ def evaluate_checkpoint(args, experiment_dir: Path):
         split="real_test",
     )
     save_evaluation(experiment_dir, "real_test", result)
+    write_result_csv(experiment_dir / "real_test_metrics.csv", result)
     print(json.dumps(result, indent=2))
     return result
 
@@ -208,37 +332,56 @@ def evaluate_checkpoint(args, experiment_dir: Path):
 def evaluate_all(args):
     results = []
     for checkpoint in sorted(args.output_dir.glob("*/best_model.pth")):
-        results.append(evaluate_checkpoint(args, checkpoint.parent))
+        name = checkpoint.parent.name
+        with experiment_logging(args.log_dir, f"evaluate_{name}"):
+            result = evaluate_checkpoint(args, checkpoint.parent)
+            update_summary_csv(args.summary_csv, result)
+            results.append(result)
     if not results:
         raise FileNotFoundError(f"No checkpoints found below {args.output_dir}")
-    summary = args.output_dir / "real_test_summary.csv"
-    with summary.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(results[0]))
-        writer.writeheader()
-        writer.writerows(results)
-    print(f"Saved {summary}")
+    print(f"Saved {len(results)} results to {args.summary_csv}")
+
+
+def run_jobs(args, jobs):
+    failures = []
+    for name, spec in jobs:
+        try:
+            run_one(args, name, spec)
+        except Exception as exc:
+            failures.append((name, str(exc)))
+            print(f"Continuing after failed experiment {name}: {exc}", file=sys.stderr)
+    if failures:
+        details = "; ".join(f"{name}: {message}" for name, message in failures)
+        raise RuntimeError(f"{len(failures)} experiment(s) failed: {details}")
 
 
 def main():
     args = parse_args()
+    if args.summary_csv is None:
+        args.summary_csv = args.output_dir / "real_test_summary.csv"
     if args.mode == "prepare":
-        prepare(args)
+        with experiment_logging(args.log_dir, "prepare"):
+            prepare(args)
         return
     required = [args.manifest_dir / name for name in ("train_original.csv", "val.csv", "real_test.csv")]
     if not all(path.exists() for path in required):
         prepare(args)
     if args.mode == "comparison":
-        for model_name in args.models:
-            run_one(
-                args,
+        jobs = [
+            (
                 f"comparison_{model_name}",
                 dict(model=model_name, augmentation=True, hnm=False),
             )
+            for model_name in args.models
+        ]
+        run_jobs(args, jobs)
     elif args.mode == "ablation":
+        jobs = []
         for variant in args.variants:
             if variant not in ABLATIONS:
                 raise ValueError(f"Unknown variant: {variant}")
-            run_one(args, f"ablation_{variant}", ABLATIONS[variant])
+            jobs.append((f"ablation_{variant}", ABLATIONS[variant]))
+        run_jobs(args, jobs)
     else:
         evaluate_all(args)
 

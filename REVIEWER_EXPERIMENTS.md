@@ -47,6 +47,17 @@ python run_reviewer_experiments.py --mode comparison \
   --epochs 100 --batch-size 16 --workers 8 --amp
 ```
 
+训练日志会实时同时输出到终端和以下文件，重复运行时追加新的时间戳区段：
+
+```text
+log/reviewer_revision/comparison_yolov8n.log
+log/reviewer_revision/comparison_yolov10n.log
+log/reviewer_revision/comparison_yolo11n.log
+log/reviewer_revision/comparison_detr_r50.log
+log/reviewer_revision/comparison_deformable_detr_r50.log
+log/reviewer_revision/comparison_yolov10_tph.log
+```
+
 可分卡运行：
 
 ```bash
@@ -71,21 +82,31 @@ python run_reviewer_experiments.py --mode ablation \
   --epochs 100 --batch-size 16 --workers 8 --amp
 ```
 
+每项消融同样写入独立日志，例如
+`log/reviewer_revision/ablation_complete.log`。
+
 硬负样本挖掘默认从第 5 轮开始，仅对真实训练集中的无缺陷图像排序，选取缺陷误报概率最高的 25%，下一轮赋予 3 倍采样权重。每轮入选样本及置信度保存在对应实验目录，便于论文复核。
 
 ## 4. 独立真实测试集汇总
 
-训练完成后，每个实验会自动生成 `real_test_metrics.json`。也可统一重新评价并生成论文表格：
+每个模型训练结束后会自动释放训练模型、加载最佳权重并评价真实测试集，无需另跑评估命令。每个实验生成：
+
+```text
+runs/reviewer_revision/<experiment>/real_test_metrics.json
+runs/reviewer_revision/<experiment>/real_test_metrics.csv
+```
+
+同时自动增量更新总表（相同实验重复运行时覆盖旧行）：
+
+```text
+runs/reviewer_revision/real_test_summary.csv
+```
+
+总表写入使用文件锁，因此可以安全地分卡并行训练。也可在已有权重上统一重新评价：
 
 ```bash
 python run_reviewer_experiments.py --mode evaluate \
   --batch-size 16 --workers 8 --amp
-```
-
-汇总表输出为：
-
-```text
-runs/reviewer_revision/real_test_summary.csv
 ```
 
 报告指标包括 Accuracy、Precision、Recall、F1、Specificity、ROC-AUC 和完整混淆矩阵计数（TP/FP/TN/FN）。论文中应只填写实际生成的结果，不应沿用旧脚本中的示例数值。
@@ -97,4 +118,3 @@ pip install -r requirements-training.txt
 ```
 
 DETR 首次运行会从 Hugging Face 下载官方预训练权重；YOLO 首次运行会下载对应 Ultralytics 权重。
-

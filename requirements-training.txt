@@ -7,3 +7,4 @@ torchvision
 tqdm
 ultralytics
 transformers>=4.46
+filelock>=3.12
