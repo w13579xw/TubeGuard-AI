@@ -13,7 +13,10 @@ import argparse
 import copy
 import csv
 import json
+import logging
 import random
+import sys
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -40,6 +43,7 @@ def parse_args():
     parser.add_argument("--data-dir", type=Path, required=True)
     parser.add_argument("--weights", type=str, default="yolov10n.pt")
     parser.add_argument("--output-dir", type=Path, default=Path("runs/yolov10_tph"))
+    parser.add_argument("--log-dir", type=Path, default=Path("log"))
     parser.add_argument("--epochs", type=int, default=150)
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--img-size", type=int, default=1280)
@@ -55,6 +59,26 @@ def parse_args():
     parser.add_argument("--resume", type=Path)
     parser.add_argument("--amp", action="store_true")
     return parser.parse_args()
+
+
+def setup_logger(log_dir):
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / f"train_{datetime.now():%Y%m%d_%H%M%S}.log"
+    logger = logging.getLogger("yolov10_tph")
+    logger.setLevel(logging.INFO)
+    logger.handlers.clear()
+    formatter = logging.Formatter(
+        "%(asctime)s | %(levelname)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    for handler in (
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(log_path, encoding="utf-8"),
+    ):
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+    logger.propagate = False
+    return logger, log_path
 
 
 def seed_everything(seed):
@@ -210,29 +234,71 @@ def save_checkpoint(
     )
 
 
-def evaluate_and_save(model, loader, criterion, device, amp, classes, output_dir):
+def evaluate_and_save(
+    model, loader, criterion, device, amp, classes, output_dir, split
+):
+    output_dir.mkdir(parents=True, exist_ok=True)
     metrics, labels, predictions = run_epoch(
         model, loader, criterion, device, optimizer=None, amp=amp
     )
     report = classification_report(
         labels,
         predictions,
+        labels=list(range(len(classes))),
         target_names=classes,
         output_dict=True,
         zero_division=0,
     )
-    matrix = confusion_matrix(labels, predictions)
+    matrix = confusion_matrix(
+        labels, predictions, labels=list(range(len(classes)))
+    )
 
-    with (output_dir / "test_metrics.json").open("w", encoding="utf-8") as file:
+    with (output_dir / "evaluation_metrics.json").open(
+        "w", encoding="utf-8"
+    ) as file:
         json.dump(metrics, file, indent=2)
     with (output_dir / "classification_report.json").open(
         "w", encoding="utf-8"
     ) as file:
         json.dump(report, file, indent=2)
+    with (output_dir / "evaluation_metrics.csv").open(
+        "w", newline="", encoding="utf-8"
+    ) as file:
+        writer = csv.DictWriter(
+            file, fieldnames=["split", "loss", "accuracy", "precision", "recall", "f1"]
+        )
+        writer.writeheader()
+        writer.writerow({"split": split, **metrics})
+
+    with (output_dir / "classification_report.csv").open(
+        "w", newline="", encoding="utf-8"
+    ) as file:
+        writer = csv.DictWriter(
+            file,
+            fieldnames=["class", "precision", "recall", "f1-score", "support"],
+        )
+        writer.writeheader()
+        for name, values in report.items():
+            if isinstance(values, dict):
+                writer.writerow({"class": name, **values})
+            else:
+                writer.writerow(
+                    {
+                        "class": name,
+                        "precision": values,
+                        "recall": "",
+                        "f1-score": "",
+                        "support": "",
+                    }
+                )
+
     with (output_dir / "confusion_matrix.csv").open(
         "w", newline="", encoding="utf-8"
     ) as file:
-        csv.writer(file).writerows(matrix.tolist())
+        writer = csv.writer(file)
+        writer.writerow(["actual/predicted", *classes])
+        for class_name, row in zip(classes, matrix.tolist()):
+            writer.writerow([class_name, *row])
     return metrics
 
 
@@ -240,10 +306,15 @@ def main():
     args = parse_args()
     args.data_dir = args.data_dir.expanduser().resolve()
     args.output_dir = args.output_dir.expanduser().resolve()
+    args.log_dir = args.log_dir.expanduser().resolve()
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    logger, log_path = setup_logger(args.log_dir)
+    logger.info("Log file: %s", log_path)
+    logger.info("Arguments: %s", json.dumps(vars(args), default=str, ensure_ascii=False))
 
     seed_everything(args.seed)
     device = resolve_device(args.device)
+    logger.info("Device: %s", device)
     use_amp = args.amp and device.type == "cuda"
     datasets, loaders = build_dataloaders(
         args.data_dir,
@@ -281,6 +352,7 @@ def main():
         epochs_without_improvement = checkpoint.get(
             "epochs_without_improvement", 0
         )
+        logger.info("Resumed from %s at epoch %d", args.resume, start_epoch + 1)
 
     best_state = copy.deepcopy(model.state_dict())
     history_path = args.output_dir / "history.csv"
@@ -349,7 +421,7 @@ def main():
                 args,
                 datasets["train"].classes,
             )
-            print(
+            logger.info(
                 f"epoch={epoch + 1:03d} "
                 f"train_loss={train_metrics['loss']:.4f} "
                 f"val_loss={val_metrics['loss']:.4f} "
@@ -358,9 +430,17 @@ def main():
             )
 
             if epochs_without_improvement >= args.patience:
-                print(f"Early stopping after {args.patience} unimproved epochs.")
+                logger.info(
+                    "Early stopping after %d unimproved epochs.", args.patience
+                )
                 break
 
+    best_model_path = args.output_dir / "best_model.pth"
+    if best_model_path.is_file():
+        best_state = torch.load(best_model_path, map_location=device)
+        logger.info("Loaded best model from %s", best_model_path)
+    else:
+        logger.info("Best-model file not found; evaluating the current model state.")
     model.load_state_dict(best_state)
     evaluation_split = "test" if "test" in loaders else "val"
     metrics = evaluate_and_save(
@@ -371,9 +451,11 @@ def main():
         use_amp,
         datasets[evaluation_split].classes,
         args.output_dir,
+        evaluation_split,
     )
-    print(f"Evaluation split: {evaluation_split}")
-    print(json.dumps(metrics, indent=2))
+    logger.info("Evaluation split: %s", evaluation_split)
+    logger.info("Evaluation metrics: %s", json.dumps(metrics))
+    logger.info("CSV evaluation results saved in %s", args.output_dir)
 
 
 if __name__ == "__main__":
