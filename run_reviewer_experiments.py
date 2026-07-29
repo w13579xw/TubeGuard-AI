@@ -27,7 +27,13 @@ from revision_experiments.data import (
     prepare_manifests,
     read_manifest,
 )
-from revision_experiments.engine import evaluate, save_evaluation, seed_everything, train
+from revision_experiments.engine import (
+    bootstrap_confidence_intervals,
+    evaluate,
+    save_evaluation,
+    seed_everything,
+    train,
+)
 from revision_experiments.models import build_model
 
 
@@ -55,11 +61,35 @@ RESULT_FIELDS = [
     "split",
     "n",
     "accuracy",
+    "balanced_accuracy",
+    "macro_precision",
+    "macro_recall",
+    "macro_f1",
+    "mcc",
     "precision",
     "recall",
     "f1",
     "specificity",
     "roc_auc",
+    "pr_auc",
+    "defect_precision",
+    "defect_recall",
+    "defect_f1",
+    "normal_precision",
+    "normal_recall",
+    "normal_f1",
+    "n_defective",
+    "n_normal",
+    "balanced_accuracy_ci_low",
+    "balanced_accuracy_ci_high",
+    "macro_f1_ci_low",
+    "macro_f1_ci_high",
+    "mcc_ci_low",
+    "mcc_ci_high",
+    "roc_auc_ci_low",
+    "roc_auc_ci_high",
+    "pr_auc_ci_low",
+    "pr_auc_ci_high",
     "tp",
     "fp",
     "tn",
@@ -249,7 +279,8 @@ def _run_one(args, name, spec):
     if device.type == "cuda":
         torch.cuda.empty_cache()
     result = evaluate_checkpoint(args, experiment_dir)
-    update_summary_csv(args.summary_csv, result)
+    for row in result:
+        update_summary_csv(args.summary_csv, row)
     return result
 
 
@@ -308,25 +339,36 @@ def evaluate_checkpoint(args, experiment_dir: Path):
     model.load_state_dict(checkpoint["model_state_dict"])
     model.to(device)
     plain_transform, _ = make_transforms(img_size)
-    real_dataset = ManifestDataset(
-        read_manifest(args.manifest_dir / "real_test.csv"), plain_transform
-    )
-    loader = DataLoader(
-        real_dataset,
-        batch_size=args.batch_size,
-        shuffle=False,
-        num_workers=args.workers,
-    )
-    result, _ = evaluate(model, loader, device, amp=args.amp)
-    result.update(
-        model=checkpoint["model_name"],
-        experiment=checkpoint["variant"],
-        split="real_test",
-    )
-    save_evaluation(experiment_dir, "real_test", result)
-    write_result_csv(experiment_dir / "real_test_metrics.csv", result)
-    print(json.dumps(result, indent=2))
-    return result
+    results = []
+    manifests = [("real_test", args.manifest_dir / "real_test.csv")]
+    balanced_path = args.manifest_dir / "real_test_balanced.csv"
+    if balanced_path.exists():
+        manifests.append(("real_test_balanced", balanced_path))
+    for split, manifest_path in manifests:
+        dataset = ManifestDataset(read_manifest(manifest_path), plain_transform)
+        loader = DataLoader(
+            dataset,
+            batch_size=args.batch_size,
+            shuffle=False,
+            num_workers=args.workers,
+        )
+        result, scores = evaluate(model, loader, device, amp=args.amp)
+        predictions = [int(score >= 0.5) for score in scores]
+        result.update(
+            bootstrap_confidence_intervals(
+                dataset.targets, predictions, scores, seed=args.seed
+            )
+        )
+        result.update(
+            model=checkpoint["model_name"],
+            experiment=checkpoint["variant"],
+            split=split,
+        )
+        save_evaluation(experiment_dir, split, result)
+        write_result_csv(experiment_dir / f"{split}_metrics.csv", result)
+        print(json.dumps(result, indent=2))
+        results.append(result)
+    return results
 
 
 def evaluate_all(args):
@@ -334,9 +376,10 @@ def evaluate_all(args):
     for checkpoint in sorted(args.output_dir.glob("*/best_model.pth")):
         name = checkpoint.parent.name
         with experiment_logging(args.log_dir, f"evaluate_{name}"):
-            result = evaluate_checkpoint(args, checkpoint.parent)
-            update_summary_csv(args.summary_csv, result)
-            results.append(result)
+            evaluated = evaluate_checkpoint(args, checkpoint.parent)
+            for result in evaluated:
+                update_summary_csv(args.summary_csv, result)
+            results.extend(evaluated)
     if not results:
         raise FileNotFoundError(f"No checkpoints found below {args.output_dir}")
     print(f"Saved {len(results)} results to {args.summary_csv}")
@@ -363,7 +406,15 @@ def main():
         with experiment_logging(args.log_dir, "prepare"):
             prepare(args)
         return
-    required = [args.manifest_dir / name for name in ("train_original.csv", "val.csv", "real_test.csv")]
+    required = [
+        args.manifest_dir / name
+        for name in (
+            "train_original.csv",
+            "val.csv",
+            "real_test.csv",
+            "real_test_balanced.csv",
+        )
+    ]
     if not all(path.exists() for path in required):
         prepare(args)
     if args.mode == "comparison":

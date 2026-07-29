@@ -12,8 +12,14 @@ import torch
 import torch.nn as nn
 from sklearn.metrics import (
     accuracy_score,
+    average_precision_score,
+    balanced_accuracy_score,
     confusion_matrix,
+    f1_score,
+    matthews_corrcoef,
+    precision_score,
     precision_recall_fscore_support,
+    recall_score,
     roc_auc_score,
 )
 from torch.utils.data import DataLoader, WeightedRandomSampler
@@ -28,25 +34,87 @@ def seed_everything(seed: int) -> None:
 
 
 def metrics(labels, predictions, scores) -> dict[str, float | int]:
-    precision, recall, f1, _ = precision_recall_fscore_support(
+    defect_precision, defect_recall, defect_f1, _ = precision_recall_fscore_support(
         labels, predictions, average="binary", pos_label=1, zero_division=0
+    )
+    normal_precision, normal_recall, normal_f1, _ = (
+        precision_recall_fscore_support(
+            labels, predictions, average="binary", pos_label=0, zero_division=0
+        )
     )
     tn, fp, fn, tp = confusion_matrix(labels, predictions, labels=[0, 1]).ravel()
     result = {
         "accuracy": float(accuracy_score(labels, predictions)),
-        "precision": float(precision),
-        "recall": float(recall),
-        "f1": float(f1),
+        "balanced_accuracy": float(balanced_accuracy_score(labels, predictions)),
+        "macro_precision": float(
+            precision_score(labels, predictions, average="macro", zero_division=0)
+        ),
+        "macro_recall": float(
+            recall_score(labels, predictions, average="macro", zero_division=0)
+        ),
+        "macro_f1": float(
+            f1_score(labels, predictions, average="macro", zero_division=0)
+        ),
+        "mcc": float(matthews_corrcoef(labels, predictions)),
+        "precision": float(defect_precision),
+        "recall": float(defect_recall),
+        "f1": float(defect_f1),
+        "defect_precision": float(defect_precision),
+        "defect_recall": float(defect_recall),
+        "defect_f1": float(defect_f1),
+        "normal_precision": float(normal_precision),
+        "normal_recall": float(normal_recall),
+        "normal_f1": float(normal_f1),
         "specificity": float(tn / (tn + fp)) if tn + fp else 0.0,
         "tp": int(tp),
         "fp": int(fp),
         "tn": int(tn),
         "fn": int(fn),
         "n": len(labels),
+        "n_defective": int(sum(label == 1 for label in labels)),
+        "n_normal": int(sum(label == 0 for label in labels)),
     }
     result["roc_auc"] = (
         float(roc_auc_score(labels, scores)) if len(set(labels)) == 2 else float("nan")
     )
+    result["pr_auc"] = (
+        float(average_precision_score(labels, scores))
+        if len(set(labels)) == 2
+        else float("nan")
+    )
+    return result
+
+
+def bootstrap_confidence_intervals(
+    labels,
+    predictions,
+    scores,
+    samples: int = 2000,
+    confidence: float = 0.95,
+    seed: int = 42,
+) -> dict[str, float]:
+    """Stratified bootstrap CIs for prevalence-robust headline metrics."""
+    labels = np.asarray(labels)
+    predictions = np.asarray(predictions)
+    scores = np.asarray(scores)
+    rng = np.random.default_rng(seed)
+    class_indices = [np.flatnonzero(labels == label) for label in (0, 1)]
+    tracked = ("balanced_accuracy", "macro_f1", "mcc", "roc_auc", "pr_auc")
+    values = {name: [] for name in tracked}
+    for _ in range(samples):
+        indices = np.concatenate(
+            [rng.choice(group, size=len(group), replace=True) for group in class_indices]
+        )
+        sampled = metrics(
+            labels[indices], predictions[indices], scores[indices]
+        )
+        for name in tracked:
+            values[name].append(sampled[name])
+    alpha = (1.0 - confidence) / 2.0
+    result = {}
+    for name, observations in values.items():
+        result[f"{name}_ci_low"] = float(np.quantile(observations, alpha))
+        result[f"{name}_ci_high"] = float(np.quantile(observations, 1.0 - alpha))
     return result
 
 
@@ -225,4 +293,3 @@ def train(
 def save_evaluation(output_dir: Path, split: str, result: dict) -> None:
     with (output_dir / f"{split}_metrics.json").open("w", encoding="utf-8") as f:
         json.dump(result, f, indent=2)
-

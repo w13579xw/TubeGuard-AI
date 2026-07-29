@@ -109,9 +109,33 @@ python run_reviewer_experiments.py --mode evaluate \
   --batch-size 16 --workers 8 --amp
 ```
 
-报告指标包括 Accuracy、Precision、Recall、F1、Specificity、ROC-AUC 和完整混淆矩阵计数（TP/FP/TN/FN）。论文中应只填写实际生成的结果，不应沿用旧脚本中的示例数值。
+报告同时覆盖完整真实测试集（444 个缺陷、156 个正常）和固定平衡敏感性子集（156/156）。指标包括 Accuracy、Balanced Accuracy、Macro-F1、MCC、双类别 Precision/Recall/F1、Specificity、ROC-AUC、PR-AUC 和完整混淆矩阵；Balanced Accuracy、Macro-F1、MCC、ROC-AUC、PR-AUC 同时给出 2,000 次类别分层 bootstrap 95% 置信区间。论文中应只填写实际生成的结果，不应沿用旧脚本中的示例数值。
 
-## 5. 环境
+已经运行普通训练脚本并得到 `best_model.pth` 时，无需重新训练，可直接执行：
+
+```bash
+python NN/yolov10_tph/evaluate_imbalance.py \
+  --data-dir /path/to/raw_data \
+  --checkpoint runs/yolov10_tph/best_model.pth \
+  --weights yolov10n.pt \
+  --output-dir runs/yolov10_tph/imbalance_evaluation \
+  --img-size 1280 --batch-size 8 --workers 8 --device cuda:0 --amp
+```
+
+## 5. 合成缺陷真实性与分布一致性审计
+
+以独立真实测试集中的缺陷图像为参照运行：
+
+```bash
+python validate_synthetic_realism.py \
+  --real-manifest data/reviewer_revision/real_test.csv \
+  --synthetic-manifest data/reviewer_revision/train_augmented.csv \
+  --output-dir runs/reviewer_revision/synthetic_realism
+```
+
+脚本输出 Fréchet ResNet distance、KID、RBF-MMD、五折分类器双样本检验、特征分布 Precision/Recall/Density/Coverage，以及亮度、对比度、Laplacian 方差、梯度、边缘密度和高光比例的物理描述量比较。该审计只用于量化分布差异，不能替代未接触真实测试集上的增强消融。
+
+## 6. 环境
 
 ```bash
 pip install -r requirements-training.txt

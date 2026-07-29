@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import random
 import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -84,6 +85,20 @@ def prepare_manifests(
     output_dir.mkdir(parents=True, exist_ok=True)
     originals = _read_csv(train_csv, image_dir, synthetic=False)
     real_test = _read_csv(real_test_csv, image_dir, synthetic=False)
+    test_by_label = {
+        label: [row for row in real_test if row.label == label]
+        for label in (0, 1)
+    }
+    balanced_count = min(len(rows) for rows in test_by_label.values())
+    rng = random.Random(seed)
+    real_test_balanced = sorted(
+        [
+            row
+            for label in (0, 1)
+            for row in rng.sample(test_by_label[label], balanced_count)
+        ],
+        key=lambda row: row.image,
+    )
 
     paths = [row.image for row in originals]
     labels = [row.label for row in originals]
@@ -121,6 +136,7 @@ def prepare_manifests(
         "train_augmented.csv": augmented,
         "val.csv": val,
         "real_test.csv": real_test,
+        "real_test_balanced.csv": real_test_balanced,
     }
     for name, rows in manifests.items():
         missing = [row.image for row in rows if not Path(row.image).is_file()]
