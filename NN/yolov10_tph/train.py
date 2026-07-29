@@ -63,7 +63,9 @@ def parse_args():
 
 def setup_logger(log_dir):
     log_dir.mkdir(parents=True, exist_ok=True)
-    log_path = log_dir / f"train_{datetime.now():%Y%m%d_%H%M%S}.log"
+    log_path = (
+        log_dir / f"yolov10_tph_train_{datetime.now():%Y%m%d_%H%M%S}.log"
+    )
     logger = logging.getLogger("yolov10_tph")
     logger.setLevel(logging.INFO)
     logger.handlers.clear()
